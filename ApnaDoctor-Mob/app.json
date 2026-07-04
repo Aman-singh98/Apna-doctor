@@ -1,0 +1,60 @@
+{
+	"expo": {
+		"name": "Apnadoctor",
+		"slug": "Apnadoctor",
+		"version": "1.0.0",
+		"orientation": "portrait",
+		"icon": "./assets/playstore-icon-512.png",
+		"scheme": "apnadoctor",
+		"userInterfaceStyle": "automatic",
+		"ios": {
+			"icon": "./assets/expo.icon",
+			"infoPlist": {
+				"NSPhotoLibraryUsageDescription": "ApnaDoctor needs access to your photos so you can set your profile picture."
+			}
+		},
+		"android": {
+			"adaptiveIcon": {
+				"backgroundColor": "#E6F4FE",
+				"foregroundImage": "./assets/playstore-icon-512.png",
+				"backgroundImage": "./assets/playstore-icon-512.png",
+				"monochromeImage": "./assets/playstore-icon-512.png"
+			},
+			"predictiveBackGestureEnabled": false,
+			"package": "com.aman_singh001.Apnadoctor"
+		},
+		"web": {
+			"output": "static",
+			"favicon": "./assets/playstore-icon-512.png"
+		},
+		"plugins": [
+			"expo-router",
+			[
+				"expo-splash-screen",
+				{
+					"backgroundColor": "#208AEF",
+					"android": {
+						"image": "./assets/playstore-icon-512.png",
+						"imageWidth": 76
+					}
+				}
+			],
+			[
+				"expo-image-picker",
+				{
+					"photosPermission": "ApnaDoctor needs access to your photos so you can set your profile picture."
+				}
+			]
+		],
+		"experiments": {
+			"typedRoutes": true,
+			"reactCompiler": true
+		},
+		"extra": {
+			"router": {},
+			"eas": {
+				"projectId": "1374897b-d7de-44b0-960f-f2961a788d2f"
+			}
+		}
+	}
+}
