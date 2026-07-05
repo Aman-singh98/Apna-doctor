@@ -67,6 +67,14 @@ const adminTicketRoutes = require('./routes/adminTicketRoutes');
 const patientRecordsRoutes = require('./routes/patient/records');
 const patientMedicalHistoryRoutes = require('./routes/patient/medicalHistory');
 
+// Patient-facing review routes — rate & review a doctor after a completed
+// appointment; also serves a doctor's aggregate rating for doctor-detail.js
+const reviewRoutes = require('./routes/reviewRoutes');
+
+// Doctor-facing review routes — lets a doctor see their own reviews +
+// aggregate rating (profile.js "Patient Reviews" section, dashboard.js stat)
+const doctorReviewRoutes = require('./routes/doctorReviewRoutes');
+
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // ── Connect to MongoDB ────────────────────────────────────────────────────────
@@ -195,6 +203,18 @@ app.use('/api/patient/records', patientRecordsRoutes);
 // GET /api/patient/medical-history        (requires patient JWT)
 // PUT /api/patient/medical-history        (requires patient JWT)
 app.use('/api/patient/medical-history', patientMedicalHistoryRoutes);
+
+// ── Patient Review Routes ─────────────────────────────────────────────────────
+// POST   /api/patient/reviews                     (requires patient JWT)
+// GET    /api/patient/reviews/mine                (requires patient JWT)
+// GET    /api/patient/reviews/doctor/:doctorId    (requires patient JWT)
+// PUT    /api/patient/reviews/:id                 (requires patient JWT)
+// DELETE /api/patient/reviews/:id                 (requires patient JWT)
+app.use('/api/patient/reviews', reviewRoutes);
+
+// ── Doctor Review Routes ──────────────────────────────────────────────────────
+// GET /api/doctor/reviews/mine  (requires doctor JWT + approved status)
+app.use('/api/doctor/reviews', doctorReviewRoutes);
 
 // ── Patient Support Ticket Routes ─────────────────────────────────────────────
 // POST /api/patient/tickets              (requires patient JWT)

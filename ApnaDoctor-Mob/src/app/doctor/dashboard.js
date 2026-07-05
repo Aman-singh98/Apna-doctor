@@ -14,8 +14,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DoctorBottomNav from '../../components/DoctorBottomNav';
+import ReviewAccordionItem from '../../components/ReviewAccordionItem';
 import { getDashboardStats, getMyProfile, setAvailability } from '../../services/dashboardService';
 import { getTodayAppointments } from '../../services/appointmentService';
+import { getMyReviews } from '../../services/doctorReviewService';
 
 const TEAL = '#1A7E8A';
 const GREEN = '#1D9E75';
@@ -44,6 +46,30 @@ export default function DoctorDashboard() {
    const [todayAppointments, setTodayAppointments] = useState([]);
    const [apptsLoading, setApptsLoading] = useState(true);
    const [apptsError, setApptsError] = useState('');
+
+   // Latest reviews + rating for the "Recent patient feedback" section and
+   // the "My rating" stat card, both previously hardcoded.
+   const [recentReviews, setRecentReviews] = useState([]);
+   const [avgRating, setAvgRating] = useState(null);
+   const [reviewsLoading, setReviewsLoading] = useState(true);
+
+   useEffect(() => {
+      let isMounted = true;
+      (async () => {
+         try {
+            const res = await getMyReviews();
+            if (isMounted) {
+               setRecentReviews(res.reviews.slice(0, 2));
+               setAvgRating(res.avgRating);
+            }
+         } catch (err) {
+            console.warn('Failed to load reviews:', err?.message);
+         } finally {
+            if (isMounted) setReviewsLoading(false);
+         }
+      })();
+      return () => { isMounted = false; };
+   }, []);
 
    // Load today's real appointments for the "Today's appointments" section.
    useEffect(() => {
@@ -190,7 +216,7 @@ export default function DoctorDashboard() {
                   { label: "Today's patients", value: '8', icon: 'person', color: TEAL, bg: '#E8F5F7' },
                   { label: 'This month', value: '143', icon: 'calendar', color: '#378ADD', bg: '#E6F1FB' },
                   { label: 'Today earnings', value: '₹3,200', icon: 'cash', color: GREEN, bg: '#E1F5EE' },
-                  { label: 'My rating', value: '4.8★', icon: 'star', color: '#F5A623', bg: '#FEF5E7' },
+                  { label: 'My rating', value: avgRating ? `${avgRating.toFixed(1)}★` : '—', icon: 'star', color: '#F5A623', bg: '#FEF5E7' },
                ].map(s => (
                   <View key={s.label} style={styles.statCard}>
                      <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
@@ -276,28 +302,31 @@ export default function DoctorDashboard() {
             </View>
 
             {/* Recent Reviews */}
-            <Text style={styles.sectionTitle}>Recent patient feedback</Text>
-            {[
-               { name: 'Kavya Nair', rating: 5, comment: 'Very thorough and patient. Explained everything clearly.' },
-               { name: 'Rohit Jain', rating: 4, comment: 'Great experience, quick diagnosis and helpful advice.' },
-            ].map((r, i) => (
-               <View key={i} style={styles.reviewCard}>
-                  <View style={styles.reviewHeader}>
-                     <View style={styles.reviewAvatar}>
-                        <Text style={styles.reviewAvatarTxt}>{r.name.split(' ').map(w => w[0]).join('')}</Text>
-                     </View>
-                     <View style={{ flex: 1 }}>
-                        <Text style={styles.reviewName}>{r.name}</Text>
-                        <View style={styles.starsRow}>
-                           {Array.from({ length: 5 }).map((_, s) => (
-                              <Ionicons key={s} name="star" size={12} color={s < r.rating ? '#F5A623' : '#ddd'} />
-                           ))}
-                        </View>
-                     </View>
-                  </View>
-                  <Text style={styles.reviewComment}>{r.comment}</Text>
+            <View style={styles.sectionHeaderRow}>
+               <Text style={styles.sectionTitle}>Recent patient feedback</Text>
+               <TouchableOpacity onPress={() => router.push('/doctor/profile')}>
+                  <Text style={styles.seeAll}>See all</Text>
+               </TouchableOpacity>
+            </View>
+            {reviewsLoading ? (
+               <View style={{ paddingVertical: 16, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color={TEAL} />
                </View>
-            ))}
+            ) : recentReviews.length === 0 ? (
+               <Text style={[styles.apptMeta, { textAlign: 'center', marginVertical: 16 }]}>
+                  No patient feedback yet.
+               </Text>
+            ) : (
+               recentReviews.map(r => (
+                  <ReviewAccordionItem
+                     key={r._id}
+                     review={r}
+                     defaultOpen={true}
+                     collapsible={false}
+                     showDate={false}
+                  />
+               ))
+            )}
 
          </ScrollView>
 

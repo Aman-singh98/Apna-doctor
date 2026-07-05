@@ -5,23 +5,38 @@ import {
    ActivityIndicator,
    Alert,
    Image,
+   LayoutAnimation,
+   Platform,
    ScrollView,
    StatusBar,
    StyleSheet,
    Text,
    TouchableOpacity,
+   UIManager,
    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DoctorBottomNav from '../../components/DoctorBottomNav';
+import ReviewAccordionItem from '../../components/ReviewAccordionItem';
 import { getMyProfile } from '../../services/profileService';
+import { getMyReviews } from '../../services/doctorReviewService';
 
 const TEAL = '#1A7E8A';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+   UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function DoctorProfileScreen() {
    const router = useRouter();
    const [loading, setLoading] = useState(true);
    const [doctor, setDoctor] = useState(null);
+
+   const [reviews, setReviews] = useState([]);
+   const [avgRating, setAvgRating] = useState(null);
+   const [reviewCount, setReviewCount] = useState(0);
+   const [reviewsLoading, setReviewsLoading] = useState(true);
+   const [reviewsSectionOpen, setReviewsSectionOpen] = useState(false);
 
    useEffect(() => {
       let isMounted = true;
@@ -36,6 +51,28 @@ export default function DoctorProfileScreen() {
          }
       };
       load();
+      return () => { isMounted = false; };
+   }, []);
+
+   useEffect(() => {
+      let isMounted = true;
+      const loadReviews = async () => {
+         try {
+            const res = await getMyReviews();
+            if (isMounted) {
+               setReviews(res.reviews);
+               setAvgRating(res.avgRating);
+               setReviewCount(res.count);
+            }
+         } catch (err) {
+            // Non-fatal — Rating stat just falls back to "—" and the
+            // reviews section shows its own error state below.
+            console.warn('Failed to load reviews:', err?.message);
+         } finally {
+            if (isMounted) setReviewsLoading(false);
+         }
+      };
+      loadReviews();
       return () => { isMounted = false; };
    }, []);
 
@@ -122,7 +159,7 @@ export default function DoctorProfileScreen() {
                   <View style={styles.statsRow}>
                      {[
                         { label: 'Experience', value: doctor?.experience != null ? `${doctor.experience} yrs` : '—' },
-                        { label: 'Rating', value: doctor?.rating ? `${doctor.rating.toFixed(1)}★` : '—' },
+                        { label: 'Rating', value: avgRating ? `${avgRating.toFixed(1)}★` : '—' },
                      ].map(s => (
                         <View key={s.label} style={styles.statItem}>
                            <Text style={styles.statValue}>{s.value}</Text>
@@ -150,7 +187,56 @@ export default function DoctorProfileScreen() {
                   </View>
                </View>
 
-               {/* Menu Sections */}
+               {/* Patient Reviews */}
+               <View style={[styles.sectionContainer, styles.reviewsSectionCard]}>
+                  <TouchableOpacity
+                     style={styles.reviewsHeaderRow}
+                     activeOpacity={0.7}
+                     onPress={() => {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        setReviewsSectionOpen(prev => !prev);
+                     }}
+                  >
+                     <Text style={styles.sectionTitle}>Patient Reviews</Text>
+                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {reviewCount > 0 && (
+                           <Text style={styles.reviewsCountTxt}>
+                              {avgRating?.toFixed(1)}★ · {reviewCount} review{reviewCount === 1 ? '' : 's'}
+                           </Text>
+                        )}
+                        <Ionicons
+                           name={reviewsSectionOpen ? 'chevron-up' : 'chevron-down'}
+                           size={16}
+                           color="#aaa"
+                           style={{ marginLeft: 8 }}
+                        />
+                     </View>
+                  </TouchableOpacity>
+
+                  {reviewsSectionOpen && (
+                     reviewsLoading ? (
+                        <View style={[styles.menuGroup, styles.reviewsEmptyBox]}>
+                           <ActivityIndicator size="small" color={TEAL} />
+                        </View>
+                     ) : reviews.length === 0 ? (
+                        <View style={[styles.menuGroup, styles.reviewsEmptyBox]}>
+                           <Ionicons name="star-outline" size={28} color="#ccc" />
+                           <Text style={styles.reviewsEmptyTxt}>
+                              No reviews yet. They'll show up here once patients rate a completed consultation.
+                           </Text>
+                        </View>
+                     ) : (
+                        reviews.map(rev => (
+                           <ReviewAccordionItem
+                              key={rev._id}
+                              review={rev}
+                              defaultOpen={false}
+                              collapsible={true}
+                           />
+                        ))
+                     )
+                  )}
+               </View>
                {menuSections.map(sec => (
                   <View key={sec.section} style={styles.sectionContainer}>
                      <Text style={styles.sectionTitle}>{sec.section}</Text>
@@ -211,13 +297,37 @@ const styles = StyleSheet.create({
    feesLabel: { flex: 1, fontSize: 14, fontWeight: '600', color: '#333' },
    feesValue: { fontSize: 15, fontWeight: '700', color: TEAL },
    sectionContainer: { marginTop: 18 },
-   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
+   reviewsSectionCard: {
+      backgroundColor: '#fff',
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: '#D9EEF1',
+      padding: 14,
+      elevation: 3,
+      shadowColor: TEAL,
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+   },
+   sectionTitle: { fontSize: 12, fontWeight: '700', color: '#888', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2, marginLeft: 4 },
    menuGroup: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#f0f0f0', overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
    menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: '#f9f9f9' },
    lastMenuItem: { borderBottomWidth: 0 },
    menuLeft: { flexDirection: 'row', alignItems: 'center' },
    menuIconBg: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#E8F5F7', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
    menuTxt: { fontSize: 14, fontWeight: '600', color: '#333' },
+   reviewsHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4, marginLeft: 4, marginRight: 4 },
+   reviewsCountTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
+   reviewsEmptyBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 28, paddingHorizontal: 20 },
+   reviewsEmptyTxt: { fontSize: 12.5, color: '#999', textAlign: 'center', marginTop: 10, lineHeight: 18 },
+   reviewCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#f0f0f0', elevation: 1 },
+   reviewCardHeader: { flexDirection: 'row', alignItems: 'center' },
+   reviewAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#E8F5F7', alignItems: 'center', justifyContent: 'center' },
+   reviewAvatarTxt: { fontSize: 13, fontWeight: 'bold', color: TEAL },
+   reviewerName: { fontSize: 13.5, fontWeight: '700', color: '#1a1a1a' },
+   reviewDate: { fontSize: 11, color: '#999', marginTop: 1 },
+   starRow: { flexDirection: 'row', gap: 1 },
+   reviewComment: { fontSize: 12.5, color: '#555', lineHeight: 18, marginTop: 8 },
    logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderWidth: 1, borderColor: '#FCEBEB', borderRadius: 16, paddingVertical: 14, marginTop: 24, elevation: 2, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
    logoutTxt: { fontSize: 14, fontWeight: 'bold', color: '#E24B4A' },
    versionTxt: { fontSize: 11, color: '#aaa', textAlign: 'center', marginTop: 24, marginBottom: 16 },

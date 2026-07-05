@@ -20,6 +20,12 @@ import {
    getAppointments as apiGetAppointments,
    rescheduleAppointment as apiRescheduleAppointment,
 } from '../../services/patientAppointmentService';
+import {
+   addReview as apiAddReview,
+   updateReview as apiUpdateReview,
+   deleteReview as apiDeleteReview,
+   getMyReviews as apiGetMyReviews,
+} from '../../services/reviewService';
 
 const TEAL = '#1A7E8A';
 
@@ -96,6 +102,26 @@ export default function AppointmentsScreen() {
    const [newTime, setNewTime] = useState('4:00 PM');
    const [actionLoading, setActionLoading] = useState(false);
 
+   // Reviews — keyed by appointment id, so each completed card can show
+   // "Rate & Review" or "★ Your Review" without a per-card fetch.
+   const [reviewsByAppt, setReviewsByAppt] = useState({});
+   const [reviewModalVisible, setReviewModalVisible] = useState(false);
+   const [reviewRating, setReviewRating] = useState(0);
+   const [reviewComment, setReviewComment] = useState('');
+   const [reviewSaving, setReviewSaving] = useState(false);
+
+   const loadReviews = useCallback(async () => {
+      try {
+         const mine = await apiGetMyReviews();
+         const map = {};
+         mine.forEach(r => { map[r.appointment] = r; });
+         setReviewsByAppt(map);
+      } catch (err) {
+         // Non-fatal — cards just fall back to showing "Rate & Review" for everything.
+         console.warn('Failed to load my reviews:', err?.message);
+      }
+   }, []);
+
    const loadAppointments = useCallback(async () => {
       try {
          setLoading(true);
@@ -110,7 +136,8 @@ export default function AppointmentsScreen() {
 
    useEffect(() => {
       loadAppointments();
-   }, [loadAppointments]);
+      loadReviews();
+   }, [loadAppointments, loadReviews]);
 
    const filteredAppts = appointments.filter(a => {
       const matchesFilter = a.status === activeFilter;
@@ -141,6 +168,72 @@ export default function AppointmentsScreen() {
       } finally {
          setActionLoading(false);
       }
+   };
+
+   const handleOpenReview = (appt) => {
+      const existing = reviewsByAppt[appt.id];
+      setSelectedAppt(appt);
+      setReviewRating(existing?.rating || 0);
+      setReviewComment(existing?.comment || '');
+      setReviewModalVisible(true);
+   };
+
+   const submitReview = async () => {
+      if (!reviewRating) {
+         Alert.alert('Error', 'Please select a star rating.');
+         return;
+      }
+      const existing = reviewsByAppt[selectedAppt.id];
+      try {
+         setReviewSaving(true);
+         if (existing) {
+            const updated = await apiUpdateReview(existing._id, { rating: reviewRating, comment: reviewComment });
+            setReviewsByAppt(prev => ({ ...prev, [selectedAppt.id]: updated }));
+         } else {
+            const created = await apiAddReview({
+               appointmentId: selectedAppt.id,
+               rating: reviewRating,
+               comment: reviewComment,
+            });
+            setReviewsByAppt(prev => ({ ...prev, [selectedAppt.id]: created }));
+         }
+         setReviewModalVisible(false);
+         Alert.alert('Thank you!', 'Your review has been saved.');
+      } catch (err) {
+         Alert.alert('Error', err?.response?.data?.message || 'Could not save your review.');
+      } finally {
+         setReviewSaving(false);
+      }
+   };
+
+   const handleDeleteReview = (appt) => {
+      const existing = reviewsByAppt[appt.id];
+      if (!existing) return;
+      Alert.alert(
+         'Delete Review',
+         'Are you sure you want to remove your review for this consultation?',
+         [
+            { text: 'Cancel', style: 'cancel' },
+            {
+               text: 'Delete',
+               style: 'destructive',
+               onPress: async () => {
+                  const previous = reviewsByAppt;
+                  setReviewsByAppt(prev => {
+                     const next = { ...prev };
+                     delete next[appt.id];
+                     return next;
+                  });
+                  try {
+                     await apiDeleteReview(existing._id);
+                  } catch (err) {
+                     setReviewsByAppt(previous);
+                     Alert.alert('Error', 'Could not delete review. Please try again.');
+                  }
+               },
+            },
+         ]
+      );
    };
 
    const handleReschedule = (appt) => {
@@ -309,6 +402,37 @@ export default function AppointmentsScreen() {
                               )}
                            </View>
                         )}
+
+                        {a.status === 'past' && a.rawStatus !== 'cancelled' && (
+                           reviewsByAppt[a.id] ? (
+                              <View style={styles.reviewRow}>
+                                 <View style={styles.reviewBadge}>
+                                    {[1, 2, 3, 4, 5].map(n => (
+                                       <Ionicons
+                                          key={n}
+                                          name={n <= reviewsByAppt[a.id].rating ? 'star' : 'star-outline'}
+                                          size={13}
+                                          color="#F5C27A"
+                                       />
+                                    ))}
+                                    <Text style={styles.reviewBadgeTxt}>Your review</Text>
+                                 </View>
+                                 <View style={styles.reviewActions}>
+                                    <TouchableOpacity onPress={() => handleOpenReview(a)}>
+                                       <Text style={styles.reviewEditTxt}>Edit</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity onPress={() => handleDeleteReview(a)}>
+                                       <Text style={styles.reviewDeleteTxt}>Delete</Text>
+                                    </TouchableOpacity>
+                                 </View>
+                              </View>
+                           ) : (
+                              <TouchableOpacity style={styles.rateBtn} onPress={() => handleOpenReview(a)}>
+                                 <Ionicons name="star-outline" size={14} color={TEAL} style={{ marginRight: 6 }} />
+                                 <Text style={styles.rateBtnTxt}>Rate & Review</Text>
+                              </TouchableOpacity>
+                           )
+                        )}
                      </View>
                   ))
                )}
@@ -430,6 +554,64 @@ export default function AppointmentsScreen() {
             </View>
          </Modal>
 
+         {/* Review Modal */}
+         <Modal
+            visible={reviewModalVisible}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setReviewModalVisible(false)}
+         >
+            <View style={styles.modalOverlay}>
+               <SafeAreaView style={styles.modalContent}>
+                  <Text style={styles.modalTitle}>
+                     {reviewsByAppt[selectedAppt?.id] ? 'Edit Your Review' : 'Rate Your Consultation'}
+                  </Text>
+                  <Text style={styles.modalSubtitle}>
+                     {selectedAppt ? `How was your consultation with ${selectedAppt.doctor}?` : ''}
+                  </Text>
+
+                  <View style={styles.starPickerRow}>
+                     {[1, 2, 3, 4, 5].map(n => (
+                        <TouchableOpacity key={n} onPress={() => setReviewRating(n)} style={{ padding: 4 }}>
+                           <Ionicons
+                              name={n <= reviewRating ? 'star' : 'star-outline'}
+                              size={32}
+                              color="#F5C27A"
+                           />
+                        </TouchableOpacity>
+                     ))}
+                  </View>
+
+                  <Text style={styles.label}>Your Comments (Optional)</Text>
+                  <TextInput
+                     style={[styles.input, { minHeight: 90, textAlignVertical: 'top' }]}
+                     placeholder="Share details about your consultation experience..."
+                     value={reviewComment}
+                     onChangeText={setReviewComment}
+                     multiline
+                     numberOfLines={4}
+                  />
+
+                  <View style={styles.modalBtnRow}>
+                     <TouchableOpacity 
+                        style={[styles.modalBtn, styles.modalBtnCancel]} 
+                        onPress={() => setReviewModalVisible(false)}
+                        disabled={reviewSaving}
+                     >
+                        <Text style={styles.modalBtnCancelTxt}>Cancel</Text>
+                     </TouchableOpacity>
+                     <TouchableOpacity 
+                        style={[styles.modalBtn, styles.modalBtnConfirm]} 
+                        onPress={submitReview}
+                        disabled={reviewSaving}
+                     >
+                        <Text style={styles.modalBtnConfirmTxt}>{reviewSaving ? 'Saving...' : 'Submit Review'}</Text>
+                     </TouchableOpacity>
+                  </View>
+               </SafeAreaView>
+            </View>
+         </Modal>
+
          {/* Bottom Navigation */}
          <PatientBottomNav activeTab="appointments" />
       </SafeAreaView>
@@ -473,6 +655,15 @@ const styles = StyleSheet.create({
    btnPrimaryTxt: { fontSize: 12, color: '#fff', fontWeight: 'bold' },
    cancelledBadge: { backgroundColor: '#FCEBEB', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
    cancelledBadgeTxt: { color: '#E24B4A', fontSize: 12, fontWeight: 'bold' },
+   rateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: TEAL, borderRadius: 8, paddingVertical: 10, marginTop: 10 },
+   rateBtnTxt: { fontSize: 12.5, fontWeight: 'bold', color: TEAL },
+   reviewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#f5f5f5' },
+   reviewBadge: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+   reviewBadgeTxt: { fontSize: 11, color: '#888', fontWeight: '600', marginLeft: 6 },
+   reviewActions: { flexDirection: 'row', gap: 14 },
+   reviewEditTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
+   reviewDeleteTxt: { fontSize: 12, fontWeight: '700', color: '#E24B4A' },
+   starPickerRow: { flexDirection: 'row', justifyContent: 'center', marginVertical: 8 },
    
    // Modal style
    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

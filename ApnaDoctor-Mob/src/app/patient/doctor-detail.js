@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
    View, Text, StyleSheet, SafeAreaView, ScrollView,
    TouchableOpacity, Image, StatusBar, Alert
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { getDoctorReviews } from '../../services/reviewService';
 
 const TEAL = '#1A7E8A';
 
@@ -22,18 +23,36 @@ export default function DoctorDetailScreen() {
    const [bookmarked, setBookmarked] = useState(false);
    const [showAllBio, setShowAllBio] = useState(false);
 
-   const mockReviews = [
-      { id: '1', name: 'Suresh Raina', date: '12 Jun 2026', rating: 5, comment: 'Very professional doctor. Explains the root cause clearly and advises appropriate lifestyle changes along with minimal medicine.' },
-      { id: '2', name: 'Anjali Gupta', date: '04 Jun 2026', rating: 4, comment: 'Satisfied with the checkup. The clinic staff was polite, and Dr. Kumar gave ample time to answer all my concerns.' },
-      { id: '3', name: 'Vikram Malhotra', date: '28 May 2026', rating: 5, comment: 'Outstanding experience. Saved me from unnecessary tests. Heartily recommended!' }
-   ];
+   const [reviews, setReviews] = useState([]);
+   const [avgRating, setAvgRating] = useState(null);
+   const [reviewCount, setReviewCount] = useState(0);
+   const [reviewsLoading, setReviewsLoading] = useState(true);
+
+   useEffect(() => {
+      (async () => {
+         try {
+            const res = await getDoctorReviews(docId);
+            setReviews(res.reviews);
+            setAvgRating(res.avgRating);
+            setReviewCount(res.count);
+         } catch (err) {
+            console.warn('Failed to load doctor reviews:', err?.message);
+         } finally {
+            setReviewsLoading(false);
+         }
+      })();
+   }, [docId]);
+
+   // Falls back to the rating passed in via route params (from doctor-list.js)
+   // until the real aggregate has loaded, so the stats grid never shows "0 ★".
+   const displayRating = avgRating != null ? avgRating : rating;
 
    const bioText = `${docName} is a highly accomplished ${spec} with over 15 years of clinical experience. Specializing in advanced diagnostics, heart failure management, preventative cardiology, and patient-centered counseling. Having worked in top-tier healthcare institutes across the country, ${docName} focuses on combining state-of-the-art diagnostics with empathy-driven patient care.`;
 
    return (
       <SafeAreaView style={styles.safe}>
          <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-         
+
          {/* Top Navigation */}
          <View style={styles.topBar}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -41,10 +60,10 @@ export default function DoctorDetailScreen() {
             </TouchableOpacity>
             <Text style={styles.barTitle}>Doctor Profile</Text>
             <TouchableOpacity onPress={() => setBookmarked(!bookmarked)} style={styles.iconBtn}>
-               <Ionicons 
-                  name={bookmarked ? "bookmark" : "bookmark-outline"} 
-                  size={22} 
-                  color={bookmarked ? TEAL : '#1a1a1a'} 
+               <Ionicons
+                  name={bookmarked ? "bookmark" : "bookmark-outline"}
+                  size={22}
+                  color={bookmarked ? TEAL : '#1a1a1a'}
                />
             </TouchableOpacity>
          </View>
@@ -58,11 +77,11 @@ export default function DoctorDetailScreen() {
                   </View>
                   <View style={styles.activeIndicator} />
                </View>
-               
+
                <Text style={styles.docName}>{docName}</Text>
                <Text style={styles.docSpec}>{spec} · MD, FACC</Text>
                <Text style={styles.hospitalName}>Apna Heart & General Hospital, Delhi</Text>
-               
+
                {/* Tags/badges */}
                <View style={styles.badgeRow}>
                   <View style={styles.badge}>
@@ -80,9 +99,9 @@ export default function DoctorDetailScreen() {
             <View style={styles.statsGrid}>
                {[
                   { label: 'Experience', val: '15+ Yrs', icon: 'ribbon-outline' },
-                  { label: 'Rating', val: `${rating} ★`, icon: 'star-outline' },
+                  { label: 'Rating', val: `${displayRating || '—'} ★`, icon: 'star-outline' },
                   { label: 'Patients', val: '10K+', icon: 'people-outline' },
-                  { label: 'Review', val: '400+', icon: 'chatbox-ellipses-outline' },
+                  { label: 'Review', val: `${reviewCount}`, icon: 'chatbox-ellipses-outline' },
                ].map((st, idx) => (
                   <View key={idx} style={styles.statBox}>
                      <View style={styles.statIconBg}>
@@ -140,45 +159,53 @@ export default function DoctorDetailScreen() {
             <View style={styles.sectionCard}>
                <View style={[styles.feeRow, { marginBottom: 12 }]}>
                   <Text style={styles.sectionTitle}>Patient Reviews</Text>
-                  <TouchableOpacity onPress={() => Alert.alert('All Reviews', 'Viewing all patient stories.')}>
-                     <Text style={styles.seeAllTxt}>See All (32)</Text>
-                  </TouchableOpacity>
+                  {reviewCount > 0 && <Text style={styles.seeAllTxt}>{reviewCount} review{reviewCount === 1 ? '' : 's'}</Text>}
                </View>
 
-               {mockReviews.map(rev => (
-                  <View key={rev.id} style={styles.reviewItem}>
-                     <View style={styles.reviewHeader}>
-                        <View style={styles.reviewUserBg}>
-                           <Text style={styles.reviewUserTxt}>{rev.name[0]}</Text>
+               {reviewsLoading ? (
+                  <Text style={styles.emptyReviewsTxt}>Loading reviews…</Text>
+               ) : reviews.length === 0 ? (
+                  <Text style={styles.emptyReviewsTxt}>
+                     No reviews yet. Reviews appear here once patients rate a completed consultation.
+                  </Text>
+               ) : (
+                  reviews.map(rev => (
+                     <View key={rev._id} style={styles.reviewItem}>
+                        <View style={styles.reviewHeader}>
+                           <View style={styles.reviewUserBg}>
+                              <Text style={styles.reviewUserTxt}>{(rev.patient?.name || '?')[0]}</Text>
+                           </View>
+                           <View style={{ flex: 1, marginLeft: 10 }}>
+                              <Text style={styles.reviewerName}>{rev.patient?.name || 'Patient'}</Text>
+                              <Text style={styles.reviewDate}>
+                                 {new Date(rev.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                              </Text>
+                           </View>
+                           <View style={styles.starRow}>
+                              {[...Array(rev.rating)].map((_, i) => (
+                                 <Ionicons key={i} name="star" size={12} color="#F5C27A" />
+                              ))}
+                           </View>
                         </View>
-                        <View style={{ flex: 1, marginLeft: 10 }}>
-                           <Text style={styles.reviewerName}>{rev.name}</Text>
-                           <Text style={styles.reviewDate}>{rev.date}</Text>
-                        </View>
-                        <View style={styles.starRow}>
-                           {[...Array(rev.rating)].map((_, i) => (
-                              <Ionicons key={i} name="star" size={12} color="#F5C27A" />
-                           ))}
-                        </View>
+                        {!!rev.comment && <Text style={styles.reviewComment}>{rev.comment}</Text>}
                      </View>
-                     <Text style={styles.reviewComment}>{rev.comment}</Text>
-                  </View>
-               ))}
+                  ))
+               )}
             </View>
 
          </ScrollView>
 
          {/* Bottom Action Bar */}
          <View style={styles.bottomBar}>
-            <TouchableOpacity 
+            <TouchableOpacity
                style={styles.chatBtn}
                onPress={() => router.push({ pathname: '/patient/consultation-chat', params: { docId, docName, spec } })}
             >
                <Ionicons name="chatbubble-ellipses-outline" size={20} color={TEAL} style={{ marginRight: 6 }} />
                <Text style={styles.chatBtnTxt}>Chat Now</Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
                style={styles.bookBtnSubmit}
                onPress={() => router.push({ pathname: '/patient/book-appointment', params: { docId, docName, spec } })}
             >
@@ -228,6 +255,7 @@ const styles = StyleSheet.create({
    clinicAddress: { fontSize: 12, color: '#666', marginTop: 2, lineHeight: 16 },
    clinicTiming: { fontSize: 11, fontWeight: '600', color: '#888', marginTop: 6 },
    seeAllTxt: { fontSize: 12, fontWeight: '600', color: TEAL },
+   emptyReviewsTxt: { fontSize: 12.5, color: '#999', lineHeight: 18, paddingVertical: 4 },
    reviewItem: { borderBottomWidth: 1, borderBottomColor: '#f9f9f9', paddingVertical: 12 },
    reviewHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
    reviewUserBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' },
