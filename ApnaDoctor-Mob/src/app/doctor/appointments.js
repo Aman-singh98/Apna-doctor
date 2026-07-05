@@ -11,7 +11,7 @@ import {
    StyleSheet,
    Text,
    TouchableOpacity,
-   View,
+   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DoctorBottomNav from '../../components/DoctorBottomNav';
@@ -49,6 +49,7 @@ const formatTime = (isoDate) =>
 // the consult via the prescription screen, so it may be empty for upcoming ones.
 const mapAppointment = (a) => ({
    id: a._id,
+   patientId: a.patient, // needed to fetch medical history / past prescriptions
    name: a.patientName,
    phone: a.patientPhone || '',
    type: a.type,
@@ -240,7 +241,25 @@ export default function DoctorAppointmentsScreen() {
                   {selectedAppt && (
                      <>
                         <View style={styles.modalHandle} />
-                        <Text style={styles.modalTitle}>Appointment Details</Text>
+                        <View style={styles.modalTitleRow}>
+                           <Text style={styles.modalTitle}>Appointment Details</Text>
+                           <TouchableOpacity
+                              style={styles.historyLink}
+                              onPress={() => {
+                                 setDetailModal(false);
+                                 router.push({
+                                    pathname: '/doctor/patient-history',
+                                    params: {
+                                       appointmentId: selectedAppt.id,
+                                       patientName: selectedAppt.name,
+                                    },
+                                 });
+                              }}
+                           >
+                              <Ionicons name="document-text-outline" size={14} color={TEAL} />
+                              <Text style={styles.historyLinkTxt}>History & Rx</Text>
+                           </TouchableOpacity>
+                        </View>
 
                         <View style={styles.modalPatientRow}>
                            <View style={styles.modalAvatar}>
@@ -358,7 +377,10 @@ const styles = StyleSheet.create({
    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
    modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
    modalHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#e0e0e0', alignSelf: 'center', marginBottom: 16 },
-   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 16 },
+   modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a' },
+   modalTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+   historyLink: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8F5F7', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
+   historyLinkTxt: { fontSize: 12, fontWeight: '700', color: TEAL },
    modalPatientRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#f8fbfc', borderRadius: 14, padding: 14, marginBottom: 16 },
    modalAvatar: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#E8F5F7', alignItems: 'center', justifyContent: 'center' },
    modalAvatarTxt: { fontSize: 16, fontWeight: 'bold', color: TEAL },

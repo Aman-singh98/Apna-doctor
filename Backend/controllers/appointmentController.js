@@ -21,6 +21,8 @@
 //                      reads req.user.id.
 
 const Appointment = require('../models/Appointment'); // adjust path/name if different
+const MedicalHistory = require('../models/MedicalHistory');
+const Prescription = require('../models/Prescription');
 
 // GET /api/appointments?status=upcoming|completed
 exports.getAppointments = async (req, res) => {
@@ -87,6 +89,47 @@ exports.completeAppointment = async (req, res) => {
       res.json(appointment);
    } catch (err) {
       res.status(500).json({ message: 'Failed to complete appointment', error: err.message });
+   }
+};
+
+// GET /api/appointments/:id/history
+// Returns the patient's medical history + their full prescription history
+// with this doctor, so the "History" button on the appointment detail modal
+// can show both in one screen without a separate patient-lookup step.
+exports.getPatientHistory = async (req, res) => {
+   try {
+      // Scope to this doctor's own appointment first — this is what proves
+      // the requesting doctor is allowed to see this patient's data at all.
+      const appointment = await Appointment.findOne({
+         _id: req.params.id,
+         doctor: req.user.id,
+      });
+
+      if (!appointment) {
+         return res.status(404).json({ message: 'Appointment not found' });
+      }
+
+      const medicalHistory = await MedicalHistory.findOne({ patient: appointment.patient });
+
+      // `Prescription.patient` can be null for prescriptions issued via
+      // free-text patient name (see Prescription.js), so also match on
+      // name+phone as a fallback to catch those older/manual records.
+      const prescriptions = await Prescription.find({
+         doctor: req.user.id,
+         $or: [
+            { patient: appointment.patient },
+            { patientName: appointment.patientName, patientPhone: appointment.patientPhone },
+         ],
+      }).sort({ date: -1 });
+
+      res.json({
+         patientName: appointment.patientName,
+         patientPhone: appointment.patientPhone,
+         medicalHistory: medicalHistory || null,
+         prescriptions,
+      });
+   } catch (err) {
+      res.status(500).json({ message: 'Failed to fetch patient history', error: err.message });
    }
 };
 

@@ -48,3 +48,11 @@ export async function getTodayAppointments() {
    const { data } = await api.get('/appointments/today');
    return data;
 }
+
+// GET /appointments/:id/history  → patient's medical history + past prescriptions,
+// used by app/doctor/patient-history.js (opened from the "History & Rx" link
+// on the appointment detail modal)
+export async function getPatientHistory(appointmentId) {
+   const { data } = await api.get(`/appointments/${appointmentId}/history`);
+   return data;
+}
