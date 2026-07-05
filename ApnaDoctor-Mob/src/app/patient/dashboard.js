@@ -87,6 +87,37 @@ function getGreeting() {
    return 'Good evening,';
 }
 
+// Parses a dob value into a Date, handling both:
+// - ISO strings ("1998-06-18" / full ISO datetime)
+// - "DD-MM-YYYY" strings ("18-06-1998") — what the profile form currently
+//   saves dob as, which `new Date()` can't parse reliably.
+// Mirrors the helper in book-appointment.js — keep them in sync.
+function parseDob(dob) {
+   if (!dob) return null;
+   if (dob instanceof Date) return isNaN(dob.getTime()) ? null : dob;
+
+   if (typeof dob === 'string') {
+      const ddmmyyyy = dob.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+      if (ddmmyyyy) {
+         const [, day, month, year] = ddmmyyyy;
+         const d = new Date(Number(year), Number(month) - 1, Number(day));
+         return isNaN(d.getTime()) ? null : d;
+      }
+   }
+
+   const d = new Date(dob);
+   return isNaN(d.getTime()) ? null : d;
+}
+
+// Patient documents don't store an `age` field — only `dob` — so age must
+// always be derived on read, here and anywhere else it's displayed.
+function calcAge(dob) {
+   const d = parseDob(dob);
+   if (!d) return null;
+   const diff = Date.now() - d.getTime();
+   return Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
+}
+
 export default function PatientDashboard() {
    const router = useRouter();
 
@@ -147,6 +178,7 @@ export default function PatientDashboard() {
 
    const patientName = patient?.name || 'Patient';
    const photoUrl = patient?.photo?.url;
+   const patientAge = calcAge(patient?.dob);
 
    return (
       <SafeAreaView style={styles.safe}>
@@ -180,7 +212,7 @@ export default function PatientDashboard() {
                <View style={styles.healthRow}>
                   {[
                      { label: 'Blood group', value: patient?.bloodGroup || '—' },
-                     { label: 'Age', value: patient?.age ? String(patient.age) : '—' },
+                     { label: 'Age', value: patientAge != null ? `${patientAge} Yrs` : '—' },
                      { label: 'Weight', value: patient?.weight ? `${patient.weight} kg` : '—' },
                   ].map(h => (
                      <View key={h.label} style={styles.healthItem}>

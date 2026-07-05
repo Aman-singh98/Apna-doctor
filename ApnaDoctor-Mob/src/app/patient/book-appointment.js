@@ -98,10 +98,32 @@ function combineDateAndSlot(iso, slot) {
    return isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function calcAge(dob) {
-   if (!dob) return '';
+// Parses a dob value into a Date, handling both:
+// - ISO strings ("1998-06-18" / full ISO datetime) — what ObjectId-based
+//   Mongoose Date fields serialize to
+// - "DD-MM-YYYY" strings ("18-06-1998") — what this app's profile form
+//   currently saves dob as, which `new Date()` CANNOT parse reliably
+//   (it's ambiguous/non-standard for the JS Date constructor).
+function parseDob(dob) {
+   if (!dob) return null;
+   if (dob instanceof Date) return isNaN(dob.getTime()) ? null : dob;
+
+   if (typeof dob === 'string') {
+      const ddmmyyyy = dob.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+      if (ddmmyyyy) {
+         const [, day, month, year] = ddmmyyyy;
+         const d = new Date(Number(year), Number(month) - 1, Number(day));
+         return isNaN(d.getTime()) ? null : d;
+      }
+   }
+
    const d = new Date(dob);
-   if (isNaN(d.getTime())) return typeof dob === 'string' ? dob : '';
+   return isNaN(d.getTime()) ? null : d;
+}
+
+function calcAge(dob) {
+   const d = parseDob(dob);
+   if (!d) return '';
    const diff = Date.now() - d.getTime();
    const years = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000));
    return `${years} Yrs`;
