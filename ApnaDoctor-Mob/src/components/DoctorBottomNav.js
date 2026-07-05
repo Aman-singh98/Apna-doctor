@@ -13,7 +13,7 @@ export default function DoctorBottomNav({ activeTab }) {
       { id: 'home', label: 'Home', icon: 'home', route: '/doctor/dashboard' },
       { id: 'appointments', label: 'Appointments', icon: 'calendar', route: '/doctor/appointments' },
       { id: 'patients', label: 'Patients', icon: 'people', route: '/doctor/patients' },
-      { id: 'profile', label: 'Profile', icon: 'person', route: '/doctor/profile' },
+      { id: 'profile', label: 'Profile', icon: 'person', route: '/doctor/profile' }
    ];
 
    const handlePress = (item) => {
