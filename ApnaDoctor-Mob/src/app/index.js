@@ -46,7 +46,7 @@ export default function LoginScreen() {
 
             <View style={styles.card}>
                <Text style={styles.hello}>Welcome back</Text>
-               <Text style={styles.roleLabel}>Choose your profile to login</Text>
+               <Text style={styles.roleLabel}>Choose your profile to sign in / sign up</Text>
 
                {/* Premium Role Switcher */}
                <View style={styles.roleContainer}>
@@ -93,7 +93,7 @@ export default function LoginScreen() {
                   <View style={styles.dividerLine} />
                   <TextInput
                      style={styles.input}
-                     placeholderTextColor="#aaa"
+                     placeholder="Enter Mobile Number"
                      keyboardType="phone-pad"
                      maxLength={10}
                      value={phone}
