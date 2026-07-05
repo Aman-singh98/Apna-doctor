@@ -1,7 +1,22 @@
+// app/doctor/notifications.js
+//
+// ASSUMPTIONS — adjust if wrong:
+//   - Service import path: assumes src/services/doctorNotificationService.js
+//     is reachable via the relative path below. Adjust the '../../' depth if wrong.
+//   - Response shape: assumes each service call resolves to the raw data already
+//     (bare array / bare object), NOT wrapped in { success, data }. If your API
+//     wraps responses that way, change `setNotifs(res)` below to `setNotifs(res.data)`.
+//   - Screen routes below (appointments/earnings/reviews) are GUESSES based on
+//     your project scope doc — swap in your actual route paths for each type.
+//   - Notification doc shape from backend: { _id, type, title, desc, read, createdAt, meta }
+
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+   ActivityIndicator,
+   Alert,
+   RefreshControl,
    ScrollView,
    StatusBar,
    StyleSheet,
@@ -10,17 +25,26 @@ import {
    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+   getMyNotifications,
+   markNotificationRead,
+   markAllNotificationsRead,
+} from '../../services/doctorNotificationService'; // adjust path if needed
 
 const TEAL = '#1A7E8A';
 
-const initialNotifications = [
-   { id: '1', type: 'appointment', title: 'New Appointment Booked', desc: 'Rahul Sharma has booked a Video consultation for Today, 10:00 AM.', time: '9:45 AM', unread: true },
-   { id: '2', type: 'payment', title: 'Payment Received', desc: 'You received ₹500 for consultation with Priya Mehta.', time: '8:30 AM', unread: true },
-   { id: '3', type: 'rating', title: 'New Patient Review', desc: 'Kavya Nair rated you ⭐ 5/5 — "Great doctor, very thorough!"', time: 'Yesterday', unread: false },
-   { id: '4', type: 'appointment', title: 'Appointment Cancelled', desc: 'Rohit Jain cancelled his Chat consultation for Tomorrow, 2:00 PM.', time: 'Yesterday', unread: false },
-   { id: '5', type: 'system', title: 'Profile Verified', desc: 'Your medical registration has been verified. You can now accept consultations.', time: '22 Jun', unread: false },
-   { id: '6', type: 'payment', title: 'Payout Processed', desc: '₹3,200 has been transferred to your bank account (HDFC ****4521).', time: '20 Jun', unread: false },
-];
+function timeAgo(dateString) {
+   const diffMs = Date.now() - new Date(dateString).getTime();
+   const mins = Math.floor(diffMs / 60000);
+   if (mins < 1) return 'Just now';
+   if (mins < 60) return `${mins} min${mins > 1 ? 's' : ''} ago`;
+   const hrs = Math.floor(mins / 60);
+   if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+   const days = Math.floor(hrs / 24);
+   if (days === 1) return 'Yesterday';
+   if (days < 7) return `${days} days ago`;
+   return new Date(dateString).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 const getIcon = (type) => {
    switch (type) {
@@ -44,10 +68,61 @@ const getBg = (type) => {
 
 export default function DoctorNotificationsScreen() {
    const router = useRouter();
-   const [notifs, setNotifs] = useState(initialNotifications);
+   const [notifs, setNotifs] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [refreshing, setRefreshing] = useState(false);
 
-   const markAllRead = () => setNotifs(prev => prev.map(n => ({ ...n, unread: false })));
-   const unreadCount = notifs.filter(n => n.unread).length;
+   const loadNotifications = useCallback(async () => {
+      try {
+         const res = await getMyNotifications();
+         setNotifs(res); // change to res.data if your backend wraps responses
+      } catch (err) {
+         Alert.alert('Error', 'Could not load notifications. Pull down to try again.');
+      }
+   }, []);
+
+   useEffect(() => {
+      (async () => {
+         setLoading(true);
+         await loadNotifications();
+         setLoading(false);
+      })();
+   }, [loadNotifications]);
+
+   const onRefresh = async () => {
+      setRefreshing(true);
+      await loadNotifications();
+      setRefreshing(false);
+   };
+
+   const markAllRead = async () => {
+      setNotifs(prev => prev.map(n => ({ ...n, unread: false })));
+      try {
+         await markAllNotificationsRead();
+      } catch (err) {
+         Alert.alert('Error', 'Failed to mark all as read. Please try again.');
+         loadNotifications();
+      }
+   };
+
+   const handleNotificationPress = async (item) => {
+      // Mark as read locally + on the server (fire-and-forget)
+      setNotifs(prev => prev.map(x => x._id === item._id ? { ...x, read: true } : x));
+      markNotificationRead(item._id).catch(() => {});
+
+      // Navigate depending on notification type — swap these for your real routes
+      if (item.type === 'appointment') {
+         router.push('/doctor/appointments');
+      } else if (item.type === 'payment') {
+         router.push('/doctor/earnings');
+      } else if (item.type === 'rating') {
+         router.push('/doctor/reviews');
+      } else {
+         Alert.alert(item.title, item.desc);
+      }
+   };
+
+   const unreadCount = notifs.filter(n => !n.read).length;
 
    return (
       <SafeAreaView style={styles.safe}>
@@ -73,31 +148,41 @@ export default function DoctorNotificationsScreen() {
             {unreadCount === 0 && <View style={{ width: 60 }} />}
          </View>
 
-         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            {notifs.length === 0 ? (
-               <View style={styles.emptyView}>
-                  <Ionicons name="notifications-off-outline" size={60} color="#ccc" />
-                  <Text style={styles.emptyTxt}>No notifications</Text>
-               </View>
-            ) : notifs.map(n => (
-               <TouchableOpacity
-                  key={n.id}
-                  style={[styles.card, n.unread && styles.cardUnread]}
-                  onPress={() => setNotifs(prev => prev.map(x => x.id === n.id ? { ...x, unread: false } : x))}
-                  activeOpacity={0.85}
-               >
-                  <View style={[styles.iconWrap, { backgroundColor: getBg(n.type) }]}>
-                     {getIcon(n.type)}
+         {loading ? (
+            <View style={styles.emptyView}>
+               <ActivityIndicator size="large" color={TEAL} />
+            </View>
+         ) : (
+            <ScrollView
+               contentContainerStyle={styles.scroll}
+               showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[TEAL]} />}
+            >
+               {notifs.length === 0 ? (
+                  <View style={styles.emptyView}>
+                     <Ionicons name="notifications-off-outline" size={60} color="#ccc" />
+                     <Text style={styles.emptyTxt}>No notifications</Text>
                   </View>
-                  <View style={styles.cardBody}>
-                     <Text style={[styles.cardTitle, n.unread && styles.cardTitleUnread]}>{n.title}</Text>
-                     <Text style={styles.cardDesc}>{n.desc}</Text>
-                     <Text style={styles.cardTime}>{n.time}</Text>
-                  </View>
-                  {n.unread && <View style={styles.unreadDot} />}
-               </TouchableOpacity>
-            ))}
-         </ScrollView>
+               ) : notifs.map(n => (
+                  <TouchableOpacity
+                     key={n._id}
+                     style={[styles.card, !n.read && styles.cardUnread]}
+                     onPress={() => handleNotificationPress(n)}
+                     activeOpacity={0.85}
+                  >
+                     <View style={[styles.iconWrap, { backgroundColor: getBg(n.type) }]}>
+                        {getIcon(n.type)}
+                     </View>
+                     <View style={styles.cardBody}>
+                        <Text style={[styles.cardTitle, !n.read && styles.cardTitleUnread]}>{n.title}</Text>
+                        <Text style={styles.cardDesc}>{n.desc}</Text>
+                        <Text style={styles.cardTime}>{timeAgo(n.createdAt)}</Text>
+                     </View>
+                     {!n.read && <View style={styles.unreadDot} />}
+                  </TouchableOpacity>
+               ))}
+            </ScrollView>
+         )}
       </SafeAreaView>
    );
 }

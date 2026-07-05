@@ -80,6 +80,14 @@ const reviewRoutes = require('./routes/reviewRoutes');
 // aggregate rating (profile.js "Patient Reviews" section, dashboard.js stat)
 const doctorReviewRoutes = require('./routes/doctorReviewRoutes');
 
+// Patient-facing notification routes — list/mark-read/clear/device-token,
+// scoped by patientProtect. Distinct from doctorNotificationRoutes below.
+const patientNotificationRoutes = require('./routes/patientNotifications');
+
+// Doctor-facing notification routes — same shape as patient's, scoped by
+// doctorProtect (so also requires approved status, like the other doctor routes).
+const doctorNotificationRoutes = require('./routes/doctorNotifications');
+
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // ── Connect to MongoDB ────────────────────────────────────────────────────────
@@ -232,6 +240,22 @@ app.use('/api/doctor/reviews', doctorReviewRoutes);
 // GET  /api/patient/tickets/:id          (requires patient JWT)
 // POST /api/patient/tickets/:id/replies  (requires patient JWT)
 app.use('/api/patient/tickets', ticketRoutes);
+
+// GET    /api/patient/notifications                (requires patient JWT)
+// GET    /api/patient/notifications/unread-count    (requires patient JWT)
+// PATCH  /api/patient/notifications/read-all        (requires patient JWT)
+// PATCH  /api/patient/notifications/:id/read         (requires patient JWT)
+// DELETE /api/patient/notifications/clear           (requires patient JWT)
+// POST   /api/patient/notifications/device-token    (requires patient JWT)
+app.use('/api/patient/notifications', patientNotificationRoutes);
+
+// GET    /api/doctor/notifications                (requires doctor JWT + approved status)
+// GET    /api/doctor/notifications/unread-count    (requires doctor JWT + approved status)
+// PATCH  /api/doctor/notifications/read-all        (requires doctor JWT + approved status)
+// PATCH  /api/doctor/notifications/:id/read         (requires doctor JWT + approved status)
+// DELETE /api/doctor/notifications/clear           (requires doctor JWT + approved status)
+// POST   /api/doctor/notifications/device-token    (requires doctor JWT + approved status)
+app.use('/api/doctor/notifications', doctorNotificationRoutes);
 
 // ── Admin Support Ticket Routes ───────────────────────────────────────────────
 // GET   /api/admin/tickets?status=&category=&search=&page=&limit=

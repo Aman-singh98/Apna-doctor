@@ -1,8 +1,24 @@
+// app/patient/notifications.js
+//
+// ASSUMPTIONS — adjust if wrong:
+//   - Service import path: this file assumes src/services/patientNotificationService.js
+//     is reachable via the relative path below (same folder recordService.js lives in
+//     — that's the pattern this mirrors). Adjust the '../../' depth if wrong.
+//   - Response shape: assumes each service call resolves to the raw data already
+//     (a bare array for list, a bare object for the others) — i.e. the backend does
+//     res.json(notifs) directly, NOT wrapped in { success, data }. recordService.js's
+//     own comment says your API usually wraps responses as { success, data, message } —
+//     if that's true here too, change `setNotifications(res)` below to `setNotifications(res.data)`.
+//   - Notification doc shape from the backend: { _id, type, title, desc, read, createdAt, meta }
+//     — note `_id` not `id`, and `createdAt` (a real Date) instead of a static `time` string.
+
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+   ActivityIndicator,
    Alert,
+   RefreshControl,
    ScrollView,
    StatusBar,
    StyleSheet,
@@ -11,23 +27,70 @@ import {
    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+   getMyNotifications,
+   markNotificationRead,
+   markAllNotificationsRead,
+   clearAllNotifications,
+} from '../../services/patientNotificationService'; // adjust path if needed
 
 const TEAL = '#1A7E8A';
+
+// Lightweight relative-time formatter so we don't need to add a date library
+// just for this one screen. Falls back to a short date once it's over a week old.
+function timeAgo(dateString) {
+   const diffMs = Date.now() - new Date(dateString).getTime();
+   const mins = Math.floor(diffMs / 60000);
+   if (mins < 1) return 'Just now';
+   if (mins < 60) return `${mins} min${mins > 1 ? 's' : ''} ago`;
+   const hrs = Math.floor(mins / 60);
+   if (hrs < 24) return `${hrs} hour${hrs > 1 ? 's' : ''} ago`;
+   const days = Math.floor(hrs / 24);
+   if (days === 1) return 'Yesterday';
+   if (days < 7) return `${days} days ago`;
+   return new Date(dateString).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+}
 
 export default function NotificationsScreen() {
    const router = useRouter();
 
-   const [notifications, setNotifications] = useState([
-      { id: '1', type: 'appointment', title: 'Upcoming Consultation', desc: 'Your video consultation with Dr. Rajesh Kumar is scheduled for today at 3:00 PM.', time: '10 mins ago', read: false },
-      { id: '2', type: 'prescription', title: 'New Prescription Issued', desc: 'Dr. Sunita Rao uploaded a new prescription for Diabetes Control.', time: '3 hours ago', read: false },
-      { id: '3', type: 'records', title: 'Blood Report Uploaded', desc: 'Your lab report - Blood Panel has been processed and is ready to view.', time: 'Yesterday', read: true },
-      { id: '4', type: 'billing', title: 'Refund Processed', desc: 'Refund of ₹400 for cancelled session TXN10210 completed successfully.', time: '2 days ago', read: true },
-      { id: '5', type: 'system', title: 'App Update Available', desc: 'Upgrade to ApnaDoctor v1.1.0 for enhanced consultation stability.', time: '5 days ago', read: true },
-   ]);
+   const [notifications, setNotifications] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [refreshing, setRefreshing] = useState(false);
 
-   const markAllRead = () => {
+   const loadNotifications = useCallback(async () => {
+      try {
+         const res = await getMyNotifications();
+         setNotifications(res); // change to res.data if your backend wraps responses
+      } catch (err) {
+         Alert.alert('Error', 'Could not load notifications. Pull down to try again.');
+      }
+   }, []);
+
+   useEffect(() => {
+      (async () => {
+         setLoading(true);
+         await loadNotifications();
+         setLoading(false);
+      })();
+   }, [loadNotifications]);
+
+   const onRefresh = async () => {
+      setRefreshing(true);
+      await loadNotifications();
+      setRefreshing(false);
+   };
+
+   const markAllRead = async () => {
+      // Optimistic update — flip local state immediately, then sync to server.
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      Alert.alert('Success', 'All notifications marked as read.');
+      try {
+         await markAllNotificationsRead();
+         Alert.alert('Success', 'All notifications marked as read.');
+      } catch (err) {
+         Alert.alert('Error', 'Failed to mark all as read. Please try again.');
+         loadNotifications(); // re-sync in case the optimistic update was wrong
+      }
    };
 
    const clearAll = () => {
@@ -36,16 +99,30 @@ export default function NotificationsScreen() {
          'Are you sure you want to clear your notifications log?',
          [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Clear All', style: 'destructive', onPress: () => setNotifications([]) }
+            {
+               text: 'Clear All',
+               style: 'destructive',
+               onPress: async () => {
+                  const prev = notifications;
+                  setNotifications([]); // optimistic
+                  try {
+                     await clearAllNotifications();
+                  } catch (err) {
+                     Alert.alert('Error', 'Failed to clear notifications. Please try again.');
+                     setNotifications(prev); // roll back
+                  }
+               }
+            }
          ]
       );
    };
 
-   const handleNotificationPress = (item) => {
-      // Mark as read when clicked
-      setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, read: true } : n));
-      
-      // Navigate or Alert depending on notification type
+   const handleNotificationPress = async (item) => {
+      // Mark as read locally + on the server (fire-and-forget — don't block navigation on it)
+      setNotifications(prev => prev.map(n => n._id === item._id ? { ...n, read: true } : n));
+      markNotificationRead(item._id).catch(() => {});
+
+      // Navigate depending on notification type
       if (item.type === 'appointment') {
          router.push('/patient/appointments');
       } else if (item.type === 'prescription' || item.type === 'records') {
@@ -85,7 +162,7 @@ export default function NotificationsScreen() {
    return (
       <SafeAreaView style={styles.safe}>
          <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-         
+
          {/* Top Bar */}
          <View style={styles.topBar}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
@@ -104,39 +181,49 @@ export default function NotificationsScreen() {
             </TouchableOpacity>
          )}
 
-         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            {notifications.length === 0 ? (
-               <View style={styles.emptyView}>
-                  <Ionicons name="notifications-off-outline" size={60} color="#ccc" />
-                  <Text style={styles.emptyTxt}>Your notification log is empty</Text>
-               </View>
-            ) : (
-               notifications.map(n => (
-                  <TouchableOpacity 
-                     key={n.id} 
-                     style={[styles.card, !n.read && styles.cardUnread]}
-                     onPress={() => handleNotificationPress(n)}
-                     activeOpacity={0.8}
-                  >
-                     <View style={styles.cardHeader}>
-                        <View style={[styles.iconBg, { backgroundColor: getIconBg(n.type) }]}>
-                           {getIcon(n.type)}
-                        </View>
-                        
-                        <View style={{ flex: 1, marginLeft: 12 }}>
-                           <View style={styles.row}>
-                              <Text style={[styles.titleTxt, !n.read && styles.titleTxtUnread]}>{n.title}</Text>
-                              <Text style={styles.timeTxt}>{n.time}</Text>
+         {loading ? (
+            <View style={styles.emptyView}>
+               <ActivityIndicator size="large" color={TEAL} />
+            </View>
+         ) : (
+            <ScrollView
+               contentContainerStyle={styles.scroll}
+               showsVerticalScrollIndicator={false}
+               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[TEAL]} />}
+            >
+               {notifications.length === 0 ? (
+                  <View style={styles.emptyView}>
+                     <Ionicons name="notifications-off-outline" size={60} color="#ccc" />
+                     <Text style={styles.emptyTxt}>Your notification log is empty</Text>
+                  </View>
+               ) : (
+                  notifications.map(n => (
+                     <TouchableOpacity
+                        key={n._id}
+                        style={[styles.card, !n.read && styles.cardUnread]}
+                        onPress={() => handleNotificationPress(n)}
+                        activeOpacity={0.8}
+                     >
+                        <View style={styles.cardHeader}>
+                           <View style={[styles.iconBg, { backgroundColor: getIconBg(n.type) }]}>
+                              {getIcon(n.type)}
                            </View>
-                           <Text style={styles.descTxt} numberOfLines={2}>{n.desc}</Text>
+
+                           <View style={{ flex: 1, marginLeft: 12 }}>
+                              <View style={styles.row}>
+                                 <Text style={[styles.titleTxt, !n.read && styles.titleTxtUnread]}>{n.title}</Text>
+                                 <Text style={styles.timeTxt}>{timeAgo(n.createdAt)}</Text>
+                              </View>
+                              <Text style={styles.descTxt} numberOfLines={2}>{n.desc}</Text>
+                           </View>
                         </View>
-                     </View>
-                     
-                     {!n.read && <View style={styles.unreadDot} />}
-                  </TouchableOpacity>
-               ))
-            )}
-         </ScrollView>
+
+                        {!n.read && <View style={styles.unreadDot} />}
+                     </TouchableOpacity>
+                  ))
+               )}
+            </ScrollView>
+         )}
       </SafeAreaView>
    );
 }

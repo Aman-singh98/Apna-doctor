@@ -17,6 +17,7 @@
 //   - req.user.id    → logged-in doctor's id (see note in appointmentController.js)
 
 const Prescription = require('../models/Prescription'); // adjust path/name if different
+const { notify } = require('../utils/notify');
 
 // GET /api/prescriptions?search=name-or-diagnosis
 exports.getPrescriptions = async (req, res) => {
@@ -90,6 +91,19 @@ exports.createPrescription = async (req, res) => {
          followUp,
          date: new Date(),
       });
+
+      // Only notify when a real Patient account is linked — a free-text
+      // patientName with no patientId has nowhere to deliver a notification.
+      if (prescription.patient) {
+         await notify({
+            recipientId: prescription.patient,
+            recipientRole: 'patient',
+            type: 'prescription',
+            title: 'New Prescription Issued',
+            desc: `Dr. ${req.user.name} uploaded a new prescription for ${diagnosis}.`,
+            meta: { prescriptionId: prescription._id },
+         });
+      }
 
       res.status(201).json(prescription);
    } catch (err) {

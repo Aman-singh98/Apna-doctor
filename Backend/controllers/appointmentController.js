@@ -24,6 +24,7 @@ const Appointment = require('../models/Appointment'); // adjust path/name if dif
 const MedicalHistory = require('../models/MedicalHistory');
 const Prescription = require('../models/Prescription');
 const Record = require('../models/Record');
+const { notify } = require('../utils/notify');
 
 // GET /api/appointments?status=upcoming|completed
 exports.getAppointments = async (req, res) => {
@@ -87,6 +88,16 @@ exports.completeAppointment = async (req, res) => {
       if (!appointment) {
          return res.status(404).json({ message: 'Appointment not found' });
       }
+
+      await notify({
+         recipientId: appointment.patient,
+         recipientRole: 'patient',
+         type: 'appointment',
+         title: 'Consultation Completed',
+         desc: `Your ${appointment.type} consultation with Dr. ${req.user.name} has been marked as completed.`,
+         meta: { appointmentId: appointment._id },
+      });
+
       res.json(appointment);
    } catch (err) {
       res.status(500).json({ message: 'Failed to complete appointment', error: err.message });
@@ -161,6 +172,16 @@ exports.cancelAppointment = async (req, res) => {
       if (!appointment) {
          return res.status(404).json({ message: 'Appointment not found' });
       }
+
+      await notify({
+         recipientId: appointment.patient,
+         recipientRole: 'patient',
+         type: 'appointment',
+         title: 'Appointment Cancelled',
+         desc: `Dr. ${req.user.name} cancelled your ${appointment.type} consultation. Reason: ${reason}`,
+         meta: { appointmentId: appointment._id },
+      });
+
       res.json(appointment);
    } catch (err) {
       res.status(500).json({ message: 'Failed to cancel appointment', error: err.message });

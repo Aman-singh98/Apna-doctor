@@ -1,58 +1,96 @@
-// ─── Notification Controller (Doctor-facing) ──────────────────────────────────
-// Used by routes/notificationRoutes.js
-//
-// ASSUMPTIONS — adjust to match your real Mongoose schema:
-//   - Model name: 'Notification'
-//   - Fields assumed, based on notifications.js screen:
-//       doctor    → ObjectId ref to Doctor (the recipient)
-//       type      → 'appointment' | 'payment' | 'rating' | 'system'
-//       title     → String
-//       desc      → String
-//       read      → Boolean (screen calls this "unread", inverted here —
-//                   storing as `read` is usually cleaner since new
-//                   notifications default to read: false)
-//       createdAt → Date (Mongoose timestamps can handle this automatically)
+const Notification = require('../models/Notification');
+const DeviceToken = require('../models/DeviceToken');
 
-const Notification = require('../models/Notification'); // adjust path/name if different
-
-// GET /api/notifications
-exports.getNotifications = async (req, res) => {
+// GET /api/notifications?page=1&limit=20
+// Assumes your auth middleware sets req.user = { id, role }
+exports.listNotifications = async (req, res) => {
    try {
-      const notifications = await Notification.find({ doctor: req.user.id })
-         .sort({ createdAt: -1 });
-      res.json(notifications);
+      const { id: recipientId, role } = req.user;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 20;
+
+      const notifs = await Notification.find({ recipientId, recipientRole: role })
+         .sort({ createdAt: -1 })
+         .skip((page - 1) * limit)
+         .limit(limit)
+         .lean();
+
+      res.json(notifs);
    } catch (err) {
       res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
    }
 };
 
-// PATCH /api/notifications/:id/read
-exports.markRead = async (req, res) => {
+// GET /api/notifications/unread-count
+exports.unreadCount = async (req, res) => {
    try {
-      const notification = await Notification.findOneAndUpdate(
-         { _id: req.params.id, doctor: req.user.id },
+      const { id: recipientId, role } = req.user;
+      const count = await Notification.countDocuments({
+         recipientId,
+         recipientRole: role,
+         read: false,
+      });
+      res.json({ count });
+   } catch (err) {
+      res.status(500).json({ message: 'Failed to fetch unread count', error: err.message });
+   }
+};
+
+// PATCH /api/notifications/:id/read
+exports.markOneRead = async (req, res) => {
+   try {
+      const { id: recipientId } = req.user;
+      const notif = await Notification.findOneAndUpdate(
+         { _id: req.params.id, recipientId }, // guard: can only mark your own
          { read: true },
          { new: true }
       );
-
-      if (!notification) {
-         return res.status(404).json({ message: 'Notification not found' });
-      }
-      res.json(notification);
+      if (!notif) return res.status(404).json({ message: 'Notification not found' });
+      res.json(notif);
    } catch (err) {
-      res.status(500).json({ message: 'Failed to mark notification as read', error: err.message });
+      res.status(500).json({ message: 'Failed to update notification', error: err.message });
    }
 };
 
 // PATCH /api/notifications/read-all
 exports.markAllRead = async (req, res) => {
    try {
+      const { id: recipientId, role } = req.user;
       await Notification.updateMany(
-         { doctor: req.user.id, read: false },
+         { recipientId, recipientRole: role, read: false },
          { read: true }
       );
       res.json({ message: 'All notifications marked as read' });
    } catch (err) {
-      res.status(500).json({ message: 'Failed to mark all as read', error: err.message });
+      res.status(500).json({ message: 'Failed to update notifications', error: err.message });
+   }
+};
+
+// DELETE /api/notifications/clear
+exports.clearAll = async (req, res) => {
+   try {
+      const { id: recipientId, role } = req.user;
+      await Notification.deleteMany({ recipientId, recipientRole: role });
+      res.json({ message: 'Notifications cleared' });
+   } catch (err) {
+      res.status(500).json({ message: 'Failed to clear notifications', error: err.message });
+   }
+};
+
+// POST /api/notifications/device-token   { token, platform }
+exports.registerDeviceToken = async (req, res) => {
+   try {
+      const { id: userId, role } = req.user;
+      const { token, platform } = req.body;
+      if (!token) return res.status(400).json({ message: 'token is required' });
+
+      await DeviceToken.findOneAndUpdate(
+         { token },
+         { userId, role, token, platform: platform || 'android' },
+         { upsert: true, new: true }
+      );
+      res.json({ message: 'Device token registered' });
+   } catch (err) {
+      res.status(500).json({ message: 'Failed to register device token', error: err.message });
    }
 };
