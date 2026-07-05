@@ -29,7 +29,7 @@ export default function DoctorBottomNav({ activeTab }) {
                <TouchableOpacity
                   key={item.id}
                   style={styles.navItem}
-                  onPress={() => handlePress(item)}
+                   onPress={() => handlePress(item)}
                   activeOpacity={0.8}
                >
                   <View style={[styles.iconContainer, isActive && styles.activeIconContainer]}>
