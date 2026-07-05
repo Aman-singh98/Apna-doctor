@@ -59,6 +59,7 @@ export default function ProfileScreen() {
          section: 'Profile & Info',
          items: [
             { label: 'Edit Profile', icon: 'person-outline', route: '/patient/profile-edit' },
+            { label: 'My Prescriptions', icon: 'document-text-outline', route: '/patient/prescriptions' },
             { label: 'Medical History', icon: 'medical-outline', route: '/patient/medical-history' },
             { label: 'Emergency Contacts', icon: 'call-outline', route: '/patient/emergency-contacts' },
             { label: 'Family Members', icon: 'people-outline', route: '/patient/family-members' },

@@ -32,6 +32,11 @@ const adminAppointmentRoutes = require('./routes/adminAppointmentRoutes');
 // Doctor-facing prescription routes (create/list/update/delete, scoped to doctor)
 const prescriptionRoutes = require('./routes/prescriptionRoutes');
 
+// Patient-facing prescription routes — read-only view of prescriptions a
+// doctor has issued to the logged-in patient. Distinct from
+// prescriptionRoutes above (doctor-facing, full CRUD).
+const patientPrescriptionRoutes = require('./routes/patientPrescriptionRoutes');
+
 // Doctor-facing appointment routes (list/today/detail/complete/cancel, scoped to doctor)
 const appointmentRoutes = require('./routes/appointmentRoutes');
 
@@ -144,6 +149,11 @@ app.use('/api/admin/appointments', adminAppointmentRoutes);
 // PUT    /api/prescriptions/:id
 // DELETE /api/prescriptions/:id
 app.use('/api/prescriptions', prescriptionRoutes);
+
+// ── Patient Prescription Routes ───────────────────────────────────────────────
+// GET /api/patient/prescriptions       (requires patient JWT) — list my Rx's
+// GET /api/patient/prescriptions/:id   (requires patient JWT) — single Rx detail
+app.use('/api/patient/prescriptions', patientPrescriptionRoutes);
 
 // ── Doctor Appointment Routes ─────────────────────────────────────────────────
 // GET    /api/appointments               (requires doctor JWT + approved status)

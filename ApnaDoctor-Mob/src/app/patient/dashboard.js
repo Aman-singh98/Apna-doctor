@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import PatientBottomNav from '../../components/PatientBottomNav';
 import { getMyPatientProfile } from '../../services/patientProfileService';
 import { getAppointments } from '../../services/patientAppointmentService';
+import { getMyPrescriptions } from '../../services/patientPrescriptionService';
 
 const TEAL = '#1A7E8A';
 
@@ -64,6 +65,21 @@ function getInitials(name) {
       .join('');
 }
 
+// Same "24 Jun 2026" style used in records.js / the patient prescriptions list.
+function formatRxDate(isoDate) {
+   if (!isoDate) return '—';
+   const d = new Date(isoDate);
+   if (Number.isNaN(d.getTime())) return '—';
+   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function getRxDoctorName(rx) {
+   if (rx?.doctor && typeof rx.doctor === 'object' && rx.doctor.name) {
+      return `Dr. ${rx.doctor.name}`;
+   }
+   return 'Doctor';
+}
+
 function getGreeting() {
    const hour = new Date().getHours();
    if (hour < 12) return 'Good morning,';
@@ -79,6 +95,9 @@ export default function PatientDashboard() {
 
    const [appointments, setAppointments] = useState([]);
    const [apptLoading, setApptLoading] = useState(true);
+
+   const [latestRx, setLatestRx] = useState(null);
+   const [rxLoading, setRxLoading] = useState(true);
 
    const loadProfile = useCallback(async () => {
       try {
@@ -105,10 +124,26 @@ export default function PatientDashboard() {
       }
    }, []);
 
+   const loadLatestPrescription = useCallback(async () => {
+      try {
+         setRxLoading(true);
+         // Backend already sorts newest-first (see prescriptionSchema's
+         // { doctor: 1, date: -1 } index / the patient controller's
+         // .sort({ date: -1 })), so the first item is the most recent.
+         const data = await getMyPrescriptions();
+         setLatestRx(Array.isArray(data) && data.length > 0 ? data[0] : null);
+      } catch (err) {
+         console.error('Failed to load prescriptions:', err);
+      } finally {
+         setRxLoading(false);
+      }
+   }, []);
+
    useEffect(() => {
       loadProfile();
       loadAppointments();
-   }, [loadProfile, loadAppointments]);
+      loadLatestPrescription();
+   }, [loadProfile, loadAppointments, loadLatestPrescription]);
 
    const patientName = patient?.name || 'Patient';
    const photoUrl = patient?.photo?.url;
@@ -230,22 +265,33 @@ export default function PatientDashboard() {
                   <Text style={styles.seeAllTxt}>History</Text>
                </TouchableOpacity>
             </View>
-            <View style={styles.rxCard}>
-               <View style={styles.rxHeader}>
-                  <View>
-                     <Text style={styles.rxDoc}>Dr. Rajesh Kumar</Text>
-                     <Text style={styles.rxDate}>15 Jun 2026</Text>
-                  </View>
-                  <MaterialCommunityIcons name="file-pdf-box" size={28} color="#E24B4A" />
+            {rxLoading ? (
+               <Text style={styles.emptyTxt}>Loading prescriptions...</Text>
+            ) : !latestRx ? (
+               <View style={styles.emptyCard}>
+                  <MaterialCommunityIcons name="file-document-outline" size={28} color="#ccc" />
+                  <Text style={styles.emptyTxt}>No prescriptions yet</Text>
                </View>
-               <Text style={styles.rxMeds}>Metoprolol 25mg, Aspirin 75mg</Text>
-               <TouchableOpacity
-                  style={styles.rxBtn}
-                  onPress={() => router.push('/patient/prescription-detail')}
-               >
-                  <Text style={styles.rxBtnTxt}>View Prescription</Text>
-               </TouchableOpacity>
-            </View>
+            ) : (
+               <View style={styles.rxCard}>
+                  <View style={styles.rxHeader}>
+                     <View>
+                        <Text style={styles.rxDoc}>{getRxDoctorName(latestRx)}</Text>
+                        <Text style={styles.rxDate}>{formatRxDate(latestRx.date)}</Text>
+                     </View>
+                     <MaterialCommunityIcons name="file-pdf-box" size={28} color="#E24B4A" />
+                  </View>
+                  <Text style={styles.rxMeds} numberOfLines={1}>
+                     {(latestRx.medicines || []).map(m => m.name).join(', ') || latestRx.diagnosis}
+                  </Text>
+                  <TouchableOpacity
+                     style={styles.rxBtn}
+                     onPress={() => router.push({ pathname: '/patient/prescription-detail', params: { id: latestRx._id } })}
+                  >
+                     <Text style={styles.rxBtnTxt}>View Prescription</Text>
+                  </TouchableOpacity>
+               </View>
+            )}
 
          </ScrollView>
 

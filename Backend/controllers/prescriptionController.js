@@ -5,7 +5,10 @@
 //   - Model name: 'Prescription'
 //   - Fields assumed, based on prescription-write.js / prescriptions.js screens:
 //       doctor       → ObjectId ref to Doctor (the logged-in doctor)
+//       patient      → ObjectId ref to Patient, nullable (set from body.patientId
+//                       when the doctor selects via the patient picker)
 //       patientName  → String
+//       patientPhone → String, optional (disambiguates same-named patients)
 //       diagnosis    → String
 //       medicines    → Array of { name, dosage, frequency, duration, instructions }
 //       notes        → String (optional)
@@ -53,10 +56,19 @@ exports.getPrescriptionById = async (req, res) => {
 };
 
 // POST /api/prescriptions
-// body: { patientName, diagnosis, medicines, notes, followUp }
+// body: { patientId, patientName, patientPhone, diagnosis, medicines, notes, followUp }
+//
+// patientId/patientPhone come from the patient picker in prescription-write.js
+// (see handleSelectPatient()) and exist specifically so two patients sharing
+// the same name can't be confused for one another — patientId links straight
+// to the real Patient doc, and patientPhone is kept as a fallback for any
+// prescription written before that doc was linked. Previously these two
+// fields were sent by the app but never read here, so every prescription
+// saved with `patient: null` and `patientPhone: ''` regardless of which
+// patient the doctor actually selected.
 exports.createPrescription = async (req, res) => {
    try {
-      const { patientName, diagnosis, medicines, notes, followUp } = req.body;
+      const { patientId, patientName, patientPhone, diagnosis, medicines, notes, followUp } = req.body;
 
       if (!patientName?.trim() || !diagnosis?.trim()) {
          return res.status(400).json({ message: 'Patient name and diagnosis are required' });
@@ -67,7 +79,11 @@ exports.createPrescription = async (req, res) => {
 
       const prescription = await Prescription.create({
          doctor: req.user.id,
+         // Guard against '' / undefined being cast as an ObjectId — only
+         // set `patient` when a real id was actually selected via the picker.
+         patient: patientId || null,
          patientName,
+         patientPhone: patientPhone || '',
          diagnosis,
          medicines,
          notes,
@@ -82,10 +98,10 @@ exports.createPrescription = async (req, res) => {
 };
 
 // PUT /api/prescriptions/:id
-// body: { patientName, diagnosis, medicines, notes, followUp }
+// body: { patientId, patientName, patientPhone, diagnosis, medicines, notes, followUp }
 exports.updatePrescription = async (req, res) => {
    try {
-      const { patientName, diagnosis, medicines, notes, followUp } = req.body;
+      const { patientId, patientName, patientPhone, diagnosis, medicines, notes, followUp } = req.body;
 
       if (!patientName?.trim() || !diagnosis?.trim()) {
          return res.status(400).json({ message: 'Patient name and diagnosis are required' });
@@ -96,7 +112,15 @@ exports.updatePrescription = async (req, res) => {
 
       const prescription = await Prescription.findOneAndUpdate(
          { _id: req.params.id, doctor: req.user.id },
-         { patientName, diagnosis, medicines, notes, followUp },
+         {
+            patient: patientId || null,
+            patientName,
+            patientPhone: patientPhone || '',
+            diagnosis,
+            medicines,
+            notes,
+            followUp,
+         },
          { new: true, runValidators: true }
       );
 

@@ -46,7 +46,7 @@ export default function PrescriptionWriteScreen() {
 
    // Field-level validation errors. `medicines` is keyed by medicine id so
    // each medicine card can show its own errors independently.
-   const [errors, setErrors] = useState({ patientName: '', diagnosis: '', followUp: '', medicines: {} });
+   const [errors, setErrors] = useState({ patientName: '', diagnosis: '', medicines: {} });
 
    const clearError = (field) => {
       setErrors(prev => (prev[field] ? { ...prev, [field]: '' } : prev));
@@ -180,18 +180,8 @@ export default function PrescriptionWriteScreen() {
       clearMedError(id, field);
    };
 
-   // Accepts an actual date ("10 Jul 2026", "2026-07-10") or a relative
-   // phrase ("After 2 weeks", "After 10 days"). Anything else is flagged.
-   const isValidFollowUp = (value) => {
-      const v = value.trim();
-      if (!v) return true; // optional field
-      if (/^after\s+\d+\s+(day|days|week|weeks|month|months)$/i.test(v)) return true;
-      const parsed = Date.parse(v);
-      return !Number.isNaN(parsed);
-   };
-
    const validate = () => {
-      const nextErrors = { patientName: '', diagnosis: '', followUp: '', medicines: {} };
+      const nextErrors = { patientName: '', diagnosis: '', medicines: {} };
       let isValid = true;
 
       if (!patientName.trim()) {
@@ -200,10 +190,6 @@ export default function PrescriptionWriteScreen() {
       }
       if (!diagnosis.trim()) {
          nextErrors.diagnosis = 'Diagnosis is required.';
-         isValid = false;
-      }
-      if (!isValidFollowUp(followUp)) {
-         nextErrors.followUp = 'Enter a real date (e.g. 10 Jul 2026) or a phrase like "After 2 weeks".';
          isValid = false;
       }
 
@@ -459,12 +445,11 @@ export default function PrescriptionWriteScreen() {
                      />
                      <Text style={[styles.label, { marginTop: 8 }]}>Follow-Up Date</Text>
                      <TextInput
-                        style={[styles.input, { borderBottomWidth: 0 }, !!errors.followUp && styles.fieldError]}
+                        style={[styles.input, { borderBottomWidth: 0 }]}
                         value={followUp}
-                        onChangeText={(v) => { setFollowUp(v); clearError('followUp'); }}
+                        onChangeText={setFollowUp}
                         placeholder="e.g. After 2 weeks / 10 Jul 2026"
                      />
-                     {!!errors.followUp && <Text style={styles.errorTxt}>{errors.followUp}</Text>}
                   </View>
 
                   <TouchableOpacity

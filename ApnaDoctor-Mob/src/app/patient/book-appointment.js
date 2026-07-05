@@ -130,7 +130,7 @@ export default function BookAppointmentScreen() {
    const [selectedDate, setSelectedDate] = useState(dates[0]);
    const [selectedSlot, setSelectedSlot] = useState(null);
    const [selectedMode, setSelectedMode] = useState(CONSULT_MODES[0]);
-   const [selectedPatient, setSelectedPatient] = useState(null);
+   const [selectedPatientId, setSelectedPatientId] = useState(null);
    const [isBooked, setIsBooked] = useState(false);
    const [bookingLoading, setBookingLoading] = useState(false);
 
@@ -139,10 +139,23 @@ export default function BookAppointmentScreen() {
    const [bookedSlots, setBookedSlots] = useState([]);
    const [slotsLoading, setSlotsLoading] = useState(false);
 
-   const patients = React.useMemo(() => ([
-      { id: 'self', kind: 'self', name: myProfile?.name || 'Myself', relation: 'Self', age: calcAge(myProfile?.dob) },
+   // NOTE: `name` here must stay the REAL profile/family name (or null if not
+   // loaded yet) — it's what gets sent to the API as `patientName`. Never put
+   // a placeholder like "Myself" in this field; use the `displayName` helper
+   // below for anything rendered in the UI instead.
+   const patients = [
+      { id: 'self', kind: 'self', name: myProfile?.name || null, relation: 'Self', age: calcAge(myProfile?.dob) },
       ...familyMembers?.map(f => ({ id: f._id, kind: 'family', name: f.name, relation: f.relation, age: f.age })),
-   ]), [myProfile, familyMembers]);
+   ];
+
+   // Display-only fallback so the UI still shows something sensible while
+   // the profile is loading — this must NEVER be sent to the API.
+   const displayName = (p) => p?.name || 'Myself';
+
+   // Always derived fresh from the current `patients` array (by id), so it
+   // automatically picks up the real name once myProfile/familyMembers load
+   // — instead of being frozen to whatever was true the moment it was picked.
+   const selectedPatient = patients.find(p => p.id === selectedPatientId) || null;
 
    // ── Initial load: doctors, family members, own profile ──────────────
    useEffect(() => {
@@ -156,6 +169,7 @@ export default function BookAppointmentScreen() {
             ]);
             setDoctors(doctorList);
             setFamilyMembers(familyList?.data ?? []);
+            console.log(profile, "profile");
             setMyProfile(profile);
 
             const preselected = params.docId ? doctorList.find(d => d._id === params.docId) : null;
@@ -171,10 +185,10 @@ export default function BookAppointmentScreen() {
 
    // Default the patient selector once profile/family data is in
    useEffect(() => {
-      if (!selectedPatient && patients.length > 0) {
-         setSelectedPatient(patients[0]);
+      if (!selectedPatientId && patients.length > 0) {
+         setSelectedPatientId(patients[0].id);
       }
-   }, [patients, selectedPatient]);
+   }, [patients, selectedPatientId]);
 
    // Reset the consult mode to one the selected doctor actually offers
    useEffect(() => {
@@ -233,6 +247,13 @@ export default function BookAppointmentScreen() {
       const isoDateTime = combineDateAndSlot(selectedDate.iso, selectedSlot);
       if (!isoDateTime) {
          Alert.alert('Error', 'Please choose a valid date and time.');
+         return;
+      }
+      if (!selectedPatient?.name) {
+         Alert.alert(
+            'Profile Incomplete',
+            'We could not find a name for the selected patient. Please update your profile (or the family member) before booking.'
+         );
          return;
       }
       try {
@@ -533,13 +554,13 @@ export default function BookAppointmentScreen() {
                            <TouchableOpacity
                               key={p.id}
                               style={[styles.patientRow, isSel && styles.patientRowActive]}
-                              onPress={() => setSelectedPatient(p)}
+                              onPress={() => setSelectedPatientId(p.id)}
                            >
                               <View style={styles.patientAvatar}>
-                                 <Text style={styles.patientAvatarTxt}>{p.name[0]}</Text>
+                                 <Text style={styles.patientAvatarTxt}>{displayName(p)[0]}</Text>
                               </View>
                               <View style={{ flex: 1, marginLeft: 10 }}>
-                                 <Text style={[styles.patientName, isSel && styles.patientNameActive]}>{p.name}</Text>
+                                 <Text style={[styles.patientName, isSel && styles.patientNameActive]}>{displayName(p)}</Text>
                                  <Text style={styles.patientMeta}>{p.relation}{p.age ? ` · ${p.age}` : ''}</Text>
                               </View>
                               <View style={[styles.radioOuter, isSel && styles.radioOuterActive]}>
