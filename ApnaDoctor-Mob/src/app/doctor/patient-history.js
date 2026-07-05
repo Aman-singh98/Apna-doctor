@@ -3,6 +3,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
    ActivityIndicator,
+   Alert,
+   Linking,
    RefreshControl,
    ScrollView,
    StatusBar,
@@ -18,6 +20,26 @@ const TEAL = '#1A7E8A';
 
 const formatDate = (isoDate) =>
    new Date(isoDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// Fixed display order for record categories — matches Record.RECORD_CATEGORIES
+// on the backend. Keeping it explicit here (rather than deriving from
+// whatever order the API returns) so sections don't jump around.
+const RECORD_CATEGORIES = ['Lab Reports', 'Prescriptions', 'Vaccines'];
+
+const RECORD_CATEGORY_META = {
+   'Lab Reports': { icon: 'flask-outline', color: '#1A7E8A' },
+   Prescriptions: { icon: 'medkit-outline', color: '#C0392B' },
+   Vaccines: { icon: 'shield-checkmark-outline', color: '#1D9E75' },
+};
+
+const formatFileSize = (bytes) => {
+   if (!bytes) return '';
+   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const fileTypeIcon = (fileType = '') =>
+   fileType.includes('pdf') ? 'document-text-outline' : 'image-outline';
 
 // Small pill used for conditions / allergies / medications chips.
 const Chip = ({ label, tone = 'default' }) => (
@@ -62,6 +84,17 @@ export default function PatientHistoryScreen() {
       history.conditions?.length || history.allergies?.length || history.medications?.length
    );
    const prescriptions = data?.prescriptions || [];
+   const records = data?.records || [];
+   const recordsByCategory = RECORD_CATEGORIES.reduce((acc, cat) => {
+      acc[cat] = records.filter((r) => r.category === cat);
+      return acc;
+   }, {});
+
+   const openRecord = (record) => {
+      Linking.openURL(record.fileUrl).catch(() =>
+         Alert.alert('Could not open file', 'Please check your connection and try again.')
+      );
+   };
 
    return (
       <SafeAreaView style={styles.safe}>
@@ -185,6 +218,50 @@ export default function PatientHistoryScreen() {
                      );
                   })
                )}
+
+               {/* Patient Records (Lab Reports / Prescriptions / Vaccines uploads) */}
+               <Text style={styles.sectionLabel}>PATIENT RECORDS ({records.length})</Text>
+               {records.length === 0 ? (
+                  <View style={styles.card}>
+                     <Text style={styles.emptyCardTxt}>No records uploaded by this patient yet.</Text>
+                  </View>
+               ) : (
+                  RECORD_CATEGORIES.map((cat) => {
+                     const items = recordsByCategory[cat];
+                     if (!items.length) return null;
+                     const meta = RECORD_CATEGORY_META[cat];
+                     return (
+                        <View key={cat} style={styles.recordGroup}>
+                           <View style={styles.recordGroupHeader}>
+                              <Ionicons name={meta.icon} size={14} color={meta.color} />
+                              <Text style={[styles.recordGroupTitle, { color: meta.color }]}>
+                                 {cat} ({items.length})
+                              </Text>
+                           </View>
+                           {items.map((r) => (
+                              <TouchableOpacity
+                                 key={r._id}
+                                 style={styles.recordCard}
+                                 activeOpacity={0.85}
+                                 onPress={() => openRecord(r)}
+                              >
+                                 <View style={[styles.recordIconWrap, { backgroundColor: `${meta.color}1A` }]}>
+                                    <Ionicons name={fileTypeIcon(r.fileType)} size={18} color={meta.color} />
+                                 </View>
+                                 <View style={{ flex: 1 }}>
+                                    <Text style={styles.recordTitle}>{r.title}</Text>
+                                    <Text style={styles.recordMeta}>
+                                       {r.providerName} · {formatDate(r.createdAt)}
+                                       {r.fileSizeBytes ? ` · ${formatFileSize(r.fileSizeBytes)}` : ''}
+                                    </Text>
+                                 </View>
+                                 <Ionicons name="open-outline" size={16} color="#999" />
+                              </TouchableOpacity>
+                           ))}
+                        </View>
+                     );
+                  })
+               )}
             </ScrollView>
          )}
       </SafeAreaView>
@@ -226,4 +303,11 @@ const styles = StyleSheet.create({
    notesLabel: { fontSize: 11, fontWeight: '700', color: '#999' },
    notesTxt: { fontSize: 12, color: '#555', marginTop: 2 },
    followUpTxt: { fontSize: 12, color: TEAL, fontWeight: '600', marginTop: 2 },
+   recordGroup: { marginBottom: 14 },
+   recordGroupHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+   recordGroupTitle: { fontSize: 12, fontWeight: '700' },
+   recordCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: '#f0f0f0' },
+   recordIconWrap: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+   recordTitle: { fontSize: 13, fontWeight: '700', color: '#1a1a1a' },
+   recordMeta: { fontSize: 11, color: '#888', marginTop: 2 },
 });

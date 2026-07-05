@@ -23,6 +23,7 @@
 const Appointment = require('../models/Appointment'); // adjust path/name if different
 const MedicalHistory = require('../models/MedicalHistory');
 const Prescription = require('../models/Prescription');
+const Record = require('../models/Record');
 
 // GET /api/appointments?status=upcoming|completed
 exports.getAppointments = async (req, res) => {
@@ -122,11 +123,20 @@ exports.getPatientHistory = async (req, res) => {
          ],
       }).sort({ date: -1 });
 
+      // Records (lab reports / prescriptions uploads / vaccines) are always
+      // tied to a real Patient account (patient is required on the schema,
+      // no free-text fallback like Prescription has), so this only returns
+      // results when appointment.patient is set.
+      const records = appointment.patient
+         ? await Record.find({ patient: appointment.patient }).sort({ createdAt: -1 })
+         : [];
+
       res.json({
          patientName: appointment.patientName,
          patientPhone: appointment.patientPhone,
          medicalHistory: medicalHistory || null,
          prescriptions,
+         records,
       });
    } catch (err) {
       res.status(500).json({ message: 'Failed to fetch patient history', error: err.message });
