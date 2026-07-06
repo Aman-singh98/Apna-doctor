@@ -9,6 +9,8 @@
 		"userInterfaceStyle": "automatic",
 		"ios": {
 			"icon": "./assets/expo.icon",
+			"bundleIdentifier": "com.aman_singh001.apnadoctor",
+			"googleServicesFile": "./GoogleService-Info.plist",
 			"infoPlist": {
 				"NSPhotoLibraryUsageDescription": "ApnaDoctor needs access to your photos so you can set your profile picture."
 			}
@@ -21,7 +23,8 @@
 				"monochromeImage": "./assets/playstore-icon-512.png"
 			},
 			"predictiveBackGestureEnabled": false,
-			"package": "com.aman_singh001.Apnadoctor"
+			"package": "com.aman_singh001.Apnadoctor",
+			"googleServicesFile": "./google-services.json"
 		},
 		"web": {
 			"output": "static",
@@ -43,6 +46,13 @@
 				"expo-image-picker",
 				{
 					"photosPermission": "ApnaDoctor needs access to your photos so you can set your profile picture."
+				}
+			],
+			[
+				"expo-notifications",
+				{
+					"icon": "./assets/playstore-icon-512.png",
+					"color": "#1A7E8A"
 				}
 			]
 		],
