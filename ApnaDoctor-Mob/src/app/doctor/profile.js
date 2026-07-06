@@ -99,7 +99,7 @@ export default function DoctorProfileScreen() {
       {
          section: 'Preferences',
          items: [
-            { label: 'App Settings', icon: 'settings-outline', route: '/doctor/settings' },
+            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen' },
          ],
       },
    ];

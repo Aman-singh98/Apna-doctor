@@ -75,6 +75,24 @@ const doctorSchema = new mongoose.Schema(
 		signupCompletedAt: { type: Date },
 		approvedAt: { type: Date },
 
+		// ── Self-service account deletion (Settings > Danger Zone) ────────────────
+		// active:           normal account
+		// pending_deletion: doctor tapped "Delete Account", inside the grace period —
+		//                    pulled off the bookable-doctors list, still logged in,
+		//                    can cancel from Settings
+		// deleted:          grace period passed, PII anonymized by the daily job
+		//                    in jobs/accountDeletionJob.js. Document is NOT removed —
+		//                    Appointments/Prescriptions/Reviews still reference this _id.
+		accountStatus: {
+			type: String,
+			enum: ['active', 'pending_deletion', 'deleted'],
+			default: 'active',
+			index: true,
+		},
+		deletionRequestedAt: { type: Date },
+		deletionScheduledAt: { type: Date }, // requestedAt + grace period
+		deletedAt: { type: Date },
+
 		// ── Admin audit trail ───────────────────────────────────────────────────
 		reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 		reviewedAt: { type: Date },

@@ -76,7 +76,7 @@ export default function ProfileScreen() {
       {
          section: 'Preferences',
          items: [
-            { label: 'App Settings', icon: 'settings-outline', route: '/patient/settings' },
+            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen' },
          ]
       }
    ];

@@ -40,6 +40,23 @@ const patientSchema = new Schema(
          default: 'active',
       },
 
+      // ── Self-service account deletion (Settings > Danger Zone) ────────────────
+      // active:           normal account
+      // pending_deletion: user tapped "Delete Account", inside the grace period —
+      //                    still logged in, can cancel from Settings
+      // deleted:          grace period passed, PII anonymized by the daily job
+      //                    in jobs/accountDeletionJob.js. Document is NOT removed —
+      //                    Appointments/Prescriptions still reference this _id.
+      accountStatus: {
+         type: String,
+         enum: ['active', 'pending_deletion', 'deleted'],
+         default: 'active',
+         index: true,
+      },
+      deletionRequestedAt: { type: Date },
+      deletionScheduledAt: { type: Date }, // requestedAt + grace period
+      deletedAt: { type: Date },
+
       // OTP fields — excluded from query results by default (select: false)
       // so they never leak into normal API responses.
       otp: { type: String, select: false },

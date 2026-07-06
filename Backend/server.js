@@ -77,6 +77,12 @@ const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 const patientRecordsRoutes = require('./routes/patient/records');
 const patientMedicalHistoryRoutes = require('./routes/patient/medicalHistory');
 
+// Self-service "Delete Account Permanently" routes (Settings > Danger Zone),
+// for both patient and doctor. See routes/accountDeletionRoutes.js for the
+// soft-delete + grace-period design.
+const accountDeletionRoutes = require('./routes/accountDeletionRoutes');
+const { startAccountDeletionJob } = require('./jobs/accountDeletionJob');
+
 // Patient-facing review routes — rate & review a doctor after a completed
 // appointment; also serves a doctor's aggregate rating for doctor-detail.js
 const reviewRoutes = require('./routes/reviewRoutes');
@@ -215,6 +221,15 @@ app.use('/api/patient/doctors', patientDoctorRoutes);
 // GET/POST/PUT/DELETE /api/patient/emergency-contacts
 app.use('/api/patient/emergency-contacts', emergencyContactsRoutes);
 
+// ── Account Deletion Routes ────────────────────────────────────────────────────
+// POST /api/patient/account/delete         (requires patient JWT)
+// POST /api/patient/account/cancel-delete  (requires patient JWT)
+app.use('/api/patient/account', accountDeletionRoutes.patientRouter);
+
+// POST /api/doctor/account/delete          (requires doctor JWT, any approval status)
+// POST /api/doctor/account/cancel-delete   (requires doctor JWT, any approval status)
+app.use('/api/doctor/account', accountDeletionRoutes.doctorRouter);
+
 // ── Patient Medical Records Routes ────────────────────────────────────────────
 // POST   /api/patient/records            (requires patient JWT, multipart/form-data)
 // GET    /api/patient/records             (requires patient JWT)
@@ -289,8 +304,10 @@ app.use(errorHandler);
 // );
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, '0.0.0.0', () =>
+app.listen(PORT, '0.0.0.0', () => {
 	console.log(
 		`[Server] Running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`
-	)
-);
+	);
+	// Daily sweep that finalizes any account deletions past their grace period.
+	startAccountDeletionJob();
+});
