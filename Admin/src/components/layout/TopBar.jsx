@@ -4,7 +4,8 @@
 
 import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Bell } from 'lucide-react';
+import { Search } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 // ── Map route paths to human-readable page titles ────────────────────────────
 const PAGE_TITLES = {
@@ -74,25 +75,7 @@ const TopBar = () => {
             </div>
 
             {/* Notification bell */}
-            <div style={{ position: 'relative' }}>
-               <button
-                  aria-label="Notifications"
-                  style={{
-                     background: 'none', border: 'none',
-                     cursor: 'pointer', color: 'var(--text-muted)',
-                     display: 'flex', padding: 6, borderRadius: 8,
-                  }}
-               >
-                  <Bell size={19} />
-               </button>
-               {/* Unread badge */}
-               <span style={{
-                  position: 'absolute', top: 4, right: 4,
-                  width: 8, height: 8, borderRadius: '50%',
-                  background: 'var(--red-danger)',
-                  border: '1.5px solid #fff',
-               }} />
-            </div>
+            <NotificationBell />
          </div>
       </header>
    );

@@ -69,6 +69,11 @@ const ticketRoutes = require('./routes/ticketRoutes');
 
 // Admin support ticket management routes (list all, update status, reply)
 const adminTicketRoutes = require('./routes/adminTicketRoutes');
+
+// Admin-facing notification routes — list/mark-read/clear/device-token,
+// scoped by the admin auth middleware. Needed now that
+// adminTicketController.js broadcasts to admins via notifyAllAdmins().
+const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
 const patientRecordsRoutes = require('./routes/patient/records');
 const patientMedicalHistoryRoutes = require('./routes/patient/medicalHistory');
 
@@ -264,6 +269,14 @@ app.use('/api/doctor/notifications', doctorNotificationRoutes);
 // PATCH /api/admin/tickets/:id/status
 // POST  /api/admin/tickets/:id/replies
 app.use('/api/admin/tickets', adminTicketRoutes);
+
+// GET    /api/admin/notifications                (requires admin JWT)
+// GET    /api/admin/notifications/unread-count    (requires admin JWT)
+// PATCH  /api/admin/notifications/read-all        (requires admin JWT)
+// PATCH  /api/admin/notifications/:id/read         (requires admin JWT)
+// DELETE /api/admin/notifications/clear           (requires admin JWT)
+// POST   /api/admin/notifications/device-token    (requires admin JWT)
+app.use('/api/admin/notifications', adminNotificationRoutes);
 
 // ── Error Handling (must be last) ─────────────────────────────────────────────
 app.use(notFound);

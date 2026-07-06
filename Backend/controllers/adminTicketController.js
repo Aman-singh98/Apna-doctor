@@ -1,4 +1,5 @@
 const Ticket = require('../models/Ticket');
+const { notify } = require('../utils/notify');
 
 // ── @route  GET /api/admin/tickets?status=&category=&search=&page=&limit= ────
 // ── @access Admin ──────────────────────────────────────────────────────────────
@@ -85,14 +86,27 @@ exports.updateTicketStatus = async (req, res, next) => {
          return res.status(400).json({ success: false, message: 'Invalid status value.' });
       }
 
-      const ticket = await Ticket.findByIdAndUpdate(
-         req.params.id,
-         { status },
-         { new: true, runValidators: true }
-      );
-
+      const ticket = await Ticket.findById(req.params.id);
       if (!ticket) {
          return res.status(404).json({ success: false, message: 'Ticket not found.' });
+      }
+
+      const statusChanged = ticket.status !== status;
+      ticket.status = status;
+      await ticket.save();
+
+      if (statusChanged) {
+         const recipientId = ticket.raisedByRole === 'patient' ? ticket.patient : ticket.doctor;
+         if (recipientId) {
+            await notify({
+               recipientId,
+               recipientRole: ticket.raisedByRole,
+               type: 'system',
+               title: 'Ticket Status Updated',
+               desc: `Your ticket #${ticket.ticketId} is now ${status}.`,
+               meta: { ticketId: ticket._id, status },
+            });
+         }
       }
 
       res.status(200).json({ success: true, data: ticket });
@@ -131,6 +145,8 @@ exports.updateTicket = async (req, res, next) => {
          return res.status(400).json({ success: false, message: 'No valid fields to update.' });
       }
 
+      const before = updates.status !== undefined ? await Ticket.findById(req.params.id).select('status') : null;
+
       const ticket = await Ticket.findByIdAndUpdate(req.params.id, updates, {
          new: true,
          runValidators: true,
@@ -140,6 +156,20 @@ exports.updateTicket = async (req, res, next) => {
 
       if (!ticket) {
          return res.status(404).json({ success: false, message: 'Ticket not found.' });
+      }
+
+      if (before && before.status !== updates.status) {
+         const recipientId = ticket.raisedByRole === 'patient' ? ticket.patient?._id : ticket.doctor?._id;
+         if (recipientId) {
+            await notify({
+               recipientId,
+               recipientRole: ticket.raisedByRole,
+               type: 'system',
+               title: 'Ticket Status Updated',
+               desc: `Your ticket #${ticket.ticketId} is now ${updates.status}.`,
+               meta: { ticketId: ticket._id, status: updates.status },
+            });
+         }
       }
 
       res.status(200).json({ success: true, data: ticket });
@@ -162,12 +192,41 @@ exports.addAdminReply = async (req, res, next) => {
          return res.status(404).json({ success: false, message: 'Ticket not found.' });
       }
 
+      const wasOpen = ticket.status === 'Open';
+
       ticket.replies.push({ message: message.trim(), sender: 'admin', senderName: senderName || 'Support Team' });
       // Replying moves an Open ticket into In Progress automatically
       if (ticket.status === 'Open') ticket.status = 'In Progress';
       await ticket.save();
       await ticket.populate('patient', 'name email phone');
       await ticket.populate('doctor', 'name email phone');
+
+      // The raiser is whichever side opened the ticket — never both.
+      const recipientId = ticket.raisedByRole === 'patient' ? ticket.patient?._id : ticket.doctor?._id;
+      if (recipientId) {
+         await notify({
+            recipientId,
+            recipientRole: ticket.raisedByRole,
+            type: 'system',
+            title: 'Support Replied to Your Ticket',
+            desc: `Support replied on ticket #${ticket.ticketId}: "${message.trim().slice(0, 60)}"`,
+            meta: { ticketId: ticket._id },
+         });
+
+         // Separate notification for the status change itself, since it's
+         // a distinct piece of information (e.g. shows up in an "Open" tab
+         // filter no longer applying) — only fires when it actually changed.
+         if (wasOpen) {
+            await notify({
+               recipientId,
+               recipientRole: ticket.raisedByRole,
+               type: 'system',
+               title: 'Ticket Status Updated',
+               desc: `Your ticket #${ticket.ticketId} is now In Progress.`,
+               meta: { ticketId: ticket._id, status: 'In Progress' },
+            });
+         }
+      }
 
       res.status(200).json({ success: true, data: ticket });
    } catch (err) {

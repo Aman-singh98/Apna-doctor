@@ -1,5 +1,6 @@
 const Doctor = require('../models/Doctor');
 const { uploadBuffer } = require('../services/cloudinaryService');
+const { notifyAllAdmins } = require('../utils/notify');
 
 async function getStatus(req, res) {
 	const doctor = await Doctor.findById(req.doctorId).select('hasAcceptedTerms approvalStatus rejectionReason suspensionReason');
@@ -54,6 +55,14 @@ async function completeSignup(req, res) {
 			signupCompletedAt: new Date(),
 		},
 	});
+
+	await notifyAllAdmins({
+		type: 'system',
+		title: 'New Doctor Verification Request',
+		desc: `Dr. ${name} (${specialization}) submitted their profile for verification.`,
+		meta: { doctorId: doctor._id },
+	});
+
 	res.json({ success: true, approvalStatus: 'pending' });
 }
 

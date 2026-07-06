@@ -1,4 +1,5 @@
 const Ticket = require('../models/Ticket');
+const { notifyAllAdmins } = require('../utils/notify');
 
 // ── @route  POST /api/doctor/tickets ──────────────────────────────────────────
 // ── @access Private (doctor JWT) ──────────────────────────────────────────────
@@ -27,6 +28,13 @@ exports.createTicket = async (req, res, next) => {
       subject: subject.trim(),
       description: description.trim(),
       status: 'Open',
+    });
+
+    await notifyAllAdmins({
+      type: 'system',
+      title: 'New Support Ticket',
+      desc: `Doctor raised ticket #${ticket.ticketId}: ${subject.trim()}`,
+      meta: { ticketId: ticket._id },
     });
 
     res.status(201).json({ success: true, data: ticket });
@@ -82,6 +90,13 @@ exports.addDoctorReply = async (req, res, next) => {
 
     ticket.replies.push({ message: message.trim(), sender: 'doctor' });
     await ticket.save();
+
+    await notifyAllAdmins({
+      type: 'system',
+      title: 'New Reply on Support Ticket',
+      desc: `Doctor replied on ticket #${ticket.ticketId}: "${message.trim().slice(0, 60)}"`,
+      meta: { ticketId: ticket._id },
+    });
 
     res.status(200).json({ success: true, data: ticket });
   } catch (err) {

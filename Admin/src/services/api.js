@@ -212,4 +212,49 @@ export const apiCancelAppointment = (id, reason) =>
 		headers: headers(),
 		body: JSON.stringify({ reason }),
 	}).then(handle);
-	
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /admin/notifications?page=&limit=
+ * → Notification[]
+ */
+export const apiGetNotifications = (params = {}) => {
+	const qs = new URLSearchParams(
+		Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v != null))
+	).toString();
+	return fetch(`${BASE}/admin/notifications${qs ? `?${qs}` : ''}`, { headers: headers() }).then(handle);
+};
+
+/** GET /admin/notifications/unread-count → { count } */
+export const apiGetUnreadCount = () =>
+	fetch(`${BASE}/admin/notifications/unread-count`, { headers: headers() }).then(handle);
+
+/** PATCH /admin/notifications/:id/read → Notification */
+export const apiMarkNotificationRead = (id) =>
+	fetch(`${BASE}/admin/notifications/${id}/read`, { method: 'PATCH', headers: headers() }).then(handle);
+
+/** PATCH /admin/notifications/read-all → { message } */
+export const apiMarkAllNotificationsRead = () =>
+	fetch(`${BASE}/admin/notifications/read-all`, { method: 'PATCH', headers: headers() }).then(handle);
+
+/** DELETE /admin/notifications/clear → { message } */
+export const apiClearNotifications = () =>
+	fetch(`${BASE}/admin/notifications/clear`, { method: 'DELETE', headers: headers() }).then(handle);
+
+/**
+ * POST /admin/notifications/device-token
+ * Registers a token for web push. Requires the admin panel to set up its
+ * own Firebase Web SDK + service worker to obtain `token` — this call just
+ * sends whatever token that flow produces to the backend.
+ * @param {string} token
+ * @param {string} [platform] - defaults to 'web' for the admin panel
+ */
+export const apiRegisterDeviceToken = (token, platform = 'web') =>
+	fetch(`${BASE}/admin/notifications/device-token`, {
+		method: 'POST',
+		headers: headers(),
+		body: JSON.stringify({ token, platform }),
+	}).then(handle);

@@ -6,7 +6,7 @@ const mongoose = require('mongoose');
 const deviceTokenSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-    role: { type: String, enum: ['patient', 'doctor'], required: true },
+    role: { type: String, enum: ['patient', 'doctor', 'admin'], required: true },
     token: { type: String, required: true, unique: true },
     platform: { type: String, enum: ['ios', 'android', 'web'], default: 'android' },
   },
