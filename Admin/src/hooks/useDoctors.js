@@ -1,7 +1,8 @@
 // ─── hooks/useDoctors.js ────────────────────────────────────────────────────
 // Encapsulates all data concerns for the doctors list: fetching (with tab
-// filter + debounced search), and the verify/reject/suspend/unsuspend
-// actions. DoctorsPage.jsx stays purely about composition + local UI state.
+// filter + debounced search), and the verify/reject/suspend/unsuspend +
+// deletion-override actions. DoctorsPage.jsx stays purely about
+// composition + local UI state.
 
 import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -11,14 +12,23 @@ import {
 	apiSuspendDoctor,
 	apiUnsuspendDoctor,
 	apiVerifyDoctor,
+	apiCancelDoctorDeletion,
+	apiFinalizeDoctorDeletion,
 } from '../services/api';
 
 const PAGE_SIZE = 10;
 const SEARCH_DEBOUNCE_MS = 350;
 
+// approvalStatus tabs (existing) vs accountStatus tabs (deletion lifecycle) —
+// two separate dimensions, so each tab maps to whichever query param applies.
 export const STATUS_VALUE = {
 	All: '', Approved: 'approved', Pending: 'pending',
 	Suspended: 'suspended', Rejected: 'rejected', Incomplete: 'not_started',
+};
+
+const ACCOUNT_STATUS_TABS = {
+	'Pending Deletion': 'pending_deletion',
+	Deleted: 'deleted',
 };
 
 const useDoctors = ({ tab, search, page }) => {
@@ -32,7 +42,11 @@ const useDoctors = ({ tab, search, page }) => {
 		setFetchLoading(true);
 		try {
 			const params = { page, limit: PAGE_SIZE };
-			if (tab !== 'All') params.status = STATUS_VALUE[tab];
+			if (ACCOUNT_STATUS_TABS[tab]) {
+				params.accountStatus = ACCOUNT_STATUS_TABS[tab];
+			} else if (tab !== 'All') {
+				params.status = STATUS_VALUE[tab];
+			}
 			if (search.trim()) params.search = search.trim();
 
 			const data = await apiGetDoctors(params);
@@ -97,6 +111,18 @@ const useDoctors = ({ tab, search, page }) => {
 		[runAction],
 	);
 
+	const cancelDoctorDeletion = useCallback(
+		(doctorId, doctorName) =>
+			runAction(() => apiCancelDoctorDeletion(doctorId), doctorId, `Dr. ${doctorName}'s scheduled deletion has been cancelled.`),
+		[runAction],
+	);
+
+	const finalizeDoctorDeletion = useCallback(
+		(doctorId, doctorName) =>
+			runAction(() => apiFinalizeDoctorDeletion(doctorId), doctorId, `Dr. ${doctorName}'s account has been permanently deleted.`),
+		[runAction],
+	);
+
 	return {
 		doctors,
 		total,
@@ -107,6 +133,8 @@ const useDoctors = ({ tab, search, page }) => {
 		unsuspendDoctor,
 		rejectDoctor,
 		suspendDoctor,
+		cancelDoctorDeletion,
+		finalizeDoctorDeletion,
 	};
 };
 

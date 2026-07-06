@@ -12,6 +12,8 @@ const {
    getPatientById,
    suspendPatient,
    unsuspendPatient,
+   cancelPatientDeletion,
+   finalizePatientDeletionNow,
 } = require('../../controllers/adminPatientController');
 
 const router = express.Router();
@@ -21,5 +23,7 @@ router.get('/', listPatients);
 router.get('/:id', getPatientById);
 router.patch('/:id/suspend', suspendPatient);
 router.patch('/:id/unsuspend', unsuspendPatient);
+router.patch('/:id/cancel-deletion', cancelPatientDeletion);
+router.patch('/:id/finalize-deletion', finalizePatientDeletionNow);
 
 module.exports = router;

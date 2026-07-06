@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, Loader2, Phone, Star } from 'lucide-react';
+import { Calendar, Clock, Loader2, Phone, Star, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ModalShell from '../common/ModalShell';
 import Badge from '../ui/Badge';
@@ -12,6 +12,12 @@ import { DetailRow, DetailSection, DocLink } from '../common/DetailDisplay';
 import { reasonBannerStyle } from '../common/modalStyles';
 import { apiGetDoctorById } from '../../services/api';
 import { formatDateTime } from '../../utils/formatters';
+
+function deletionLabel(accountStatus) {
+	if (accountStatus === 'pending_deletion') return 'Pending Deletion';
+	if (accountStatus === 'deleted') return 'Deleted';
+	return null;
+}
 
 const DoctorDetailModal = ({ doctorId, onClose }) => {
 	const [doctor, setDoctor] = useState(null);
@@ -58,7 +64,12 @@ const DoctorDetailModal = ({ doctorId, onClose }) => {
 								{doctor.specialization || 'No specialization set'}
 							</p>
 						</div>
-						<Badge status={doctor.approvalStatus} />
+						<div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+							<Badge status={doctor.approvalStatus} />
+							{deletionLabel(doctor.accountStatus) && (
+								<Badge status={doctor.accountStatus} label={deletionLabel(doctor.accountStatus)} />
+							)}
+						</div>
 					</div>
 
 					{/* Reason banner (rejected/suspended) */}
@@ -129,6 +140,24 @@ const DoctorDetailModal = ({ doctorId, onClose }) => {
 						/>
 						<DetailRow label="Reviewed At" value={formatDateTime(doctor.reviewedAt)} />
 					</DetailSection>
+
+					{/* Account deletion */}
+					{doctor.accountStatus !== 'active' && (
+						<DetailSection label="Account Deletion">
+							<DetailRow
+								icon={<Trash2 size={13} />}
+								label="Status"
+								value={deletionLabel(doctor.accountStatus)}
+							/>
+							<DetailRow label="Requested At" value={formatDateTime(doctor.deletionRequestedAt)} />
+							{doctor.accountStatus === 'pending_deletion' && (
+								<DetailRow label="Scheduled For" value={formatDateTime(doctor.deletionScheduledAt)} />
+							)}
+							{doctor.accountStatus === 'deleted' && (
+								<DetailRow label="Deleted At" value={formatDateTime(doctor.deletedAt)} />
+							)}
+						</DetailSection>
+					)}
 				</motion.div>
 			)}
 		</ModalShell>

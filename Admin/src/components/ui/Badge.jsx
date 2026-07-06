@@ -14,6 +14,10 @@ const BADGE_STYLES = {
    cancelled: { bg: '#F1F5F9', color: '#64748B' },
    paid: { bg: '#DCFCE7', color: '#15803D' },
    refunded: { bg: '#FEE2E2', color: '#B91C1C' },
+   // Self-service account deletion lifecycle (accountStatus field) — distinct
+   // from active/suspended above, which track a different dimension.
+   pending_deletion: { bg: '#FFEDD5', color: '#C2410C' },
+   deleted: { bg: '#E2E8F0', color: '#334155' },
 };
 
 /**

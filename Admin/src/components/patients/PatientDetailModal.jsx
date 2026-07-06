@@ -3,7 +3,7 @@
 // ModalShell + DetailSection/DetailRow building blocks.
 
 import { useEffect, useState } from 'react';
-import { Loader2, Phone, Mail, User, Cake, Droplet, Weight, Calendar, ShieldCheck } from 'lucide-react';
+import { Loader2, Phone, Mail, User, Cake, Droplet, Weight, Calendar, ShieldCheck, Trash2 } from 'lucide-react';
 import ModalShell from '../common/ModalShell';
 import { DetailSection, DetailRow } from '../common/DetailDisplay';
 import { MODAL_STYLES } from '../common/modalStyles';
@@ -13,6 +13,12 @@ import { apiGetPatientById } from '../../services/api';
 function formatDate(iso) {
    if (!iso) return '—';
    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function deletionLabel(accountStatus) {
+   if (accountStatus === 'pending_deletion') return 'Pending Deletion';
+   if (accountStatus === 'deleted') return 'Deleted';
+   return null;
 }
 
 const PatientDetailModal = ({ patientId, onClose }) => {
@@ -52,7 +58,12 @@ const PatientDetailModal = ({ patientId, onClose }) => {
                      <h3 style={{ ...MODAL_STYLES.title, marginBottom: 2 }}>{patient.name || 'Unnamed Patient'}</h3>
                      <p style={{ ...MODAL_STYLES.subtitle, marginBottom: 0 }}>{patient.phone}</p>
                   </div>
-                  <Badge status={patient.status} />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                     <Badge status={patient.status} />
+                     {deletionLabel(patient.accountStatus) && (
+                        <Badge status={patient.accountStatus} label={deletionLabel(patient.accountStatus)} />
+                     )}
+                  </div>
                </div>
 
                <DetailSection label="Contact">
@@ -75,6 +86,23 @@ const PatientDetailModal = ({ patientId, onClose }) => {
                   <DetailRow icon={<ShieldCheck size={13} />} label="Terms Accepted" value={patient.hasAcceptedTerms ? 'Yes' : 'No'} />
                   <DetailRow label="Profile Complete" value={patient.hasCompletedProfile ? 'Yes' : 'No'} />
                </DetailSection>
+
+               {patient.accountStatus !== 'active' && (
+                  <DetailSection label="Account Deletion">
+                     <DetailRow
+                        icon={<Trash2 size={13} />}
+                        label="Status"
+                        value={deletionLabel(patient.accountStatus)}
+                     />
+                     <DetailRow icon={<Calendar size={13} />} label="Requested At" value={formatDate(patient.deletionRequestedAt)} />
+                     {patient.accountStatus === 'pending_deletion' && (
+                        <DetailRow icon={<Calendar size={13} />} label="Scheduled For" value={formatDate(patient.deletionScheduledAt)} />
+                     )}
+                     {patient.accountStatus === 'deleted' && (
+                        <DetailRow icon={<Calendar size={13} />} label="Deleted At" value={formatDate(patient.deletedAt)} />
+                     )}
+                  </DetailSection>
+               )}
             </>
          ) : null}
       </ModalShell>

@@ -1,5 +1,7 @@
 // ─── pages/DoctorsPage.jsx ─────────────────────────────────────────────────
-// Admin: list doctors, approve / reject / suspend / unsuspend.
+// Admin: list doctors, approve / reject / suspend / unsuspend, and manage
+// the self-service account-deletion lifecycle (cancel a scheduled deletion,
+// or force-finalize one early).
 // All data comes from the real backend via services/api.js.
 //
 // This page is intentionally "dumb": data lives in useDoctors, modals and
@@ -20,7 +22,34 @@ import DoctorDetailModal from '../components/doctors/DoctorDetailModal';
 import { getDoctorColumns } from '../components/doctors/doctorColumns';
 import useDoctors from '../hooks/useDoctors';
 
-const FILTER_TABS = ['All', 'Approved', 'Pending', 'Suspended', 'Rejected', 'Incomplete'];
+const FILTER_TABS = ['All', 'Approved', 'Pending', 'Suspended', 'Rejected', 'Incomplete', 'Pending Deletion', 'Deleted'];
+
+const CONFIRM_COPY = {
+	verify: {
+		title: (name) => `Approve Dr. ${name}?`,
+		message: 'This doctor will be able to go live and accept consultations immediately.',
+		confirmLabel: 'Approve',
+		danger: false,
+	},
+	unsuspend: {
+		title: (name) => `Reactivate Dr. ${name}?`,
+		message: 'This lifts the suspension and restores their account to approved status.',
+		confirmLabel: 'Reactivate',
+		danger: false,
+	},
+	'cancel-deletion': {
+		title: (name) => `Cancel scheduled deletion for Dr. ${name}?`,
+		message: "This restores the doctor's account to active and cancels the pending deletion. They'll be able to go live again.",
+		confirmLabel: 'Cancel Deletion',
+		danger: false,
+	},
+	'finalize-deletion': {
+		title: (name) => `Permanently delete Dr. ${name} now?`,
+		message: 'This skips the remaining grace period and anonymizes the account immediately. This cannot be undone.',
+		confirmLabel: 'Delete Now',
+		danger: true,
+	},
+};
 
 const DoctorsPage = () => {
 	const [tab, setTab] = useState('All');
@@ -29,13 +58,14 @@ const DoctorsPage = () => {
 
 	// { doctorId, doctorName, type: 'reject' | 'suspend' }
 	const [reasonModal, setReasonModal] = useState(null);
-	// { doctorId, doctorName, type: 'verify' | 'unsuspend' }
+	// { doctorId, doctorName, type: 'verify' | 'unsuspend' | 'cancel-deletion' | 'finalize-deletion' }
 	const [confirmModal, setConfirmModal] = useState(null);
 	const [detailId, setDetailId] = useState(null);
 
 	const {
 		doctors, total, pages, fetchLoading, actionLoading,
 		verifyDoctor, unsuspendDoctor, rejectDoctor, suspendDoctor,
+		cancelDoctorDeletion, finalizeDoctorDeletion,
 	} = useDoctors({ tab, search, page });
 
 	// Reset to page 1 whenever the filter or search term changes.
@@ -43,9 +73,13 @@ const DoctorsPage = () => {
 
 	const handleConfirmAction = async () => {
 		const { doctorId, doctorName, type } = confirmModal;
-		const succeeded = type === 'verify'
-			? await verifyDoctor(doctorId, doctorName)
-			: await unsuspendDoctor(doctorId, doctorName);
+		const action = {
+			verify: verifyDoctor,
+			unsuspend: unsuspendDoctor,
+			'cancel-deletion': cancelDoctorDeletion,
+			'finalize-deletion': finalizeDoctorDeletion,
+		}[type];
+		const succeeded = await action(doctorId, doctorName);
 		if (succeeded) setConfirmModal(null);
 	};
 
@@ -64,6 +98,8 @@ const DoctorsPage = () => {
 		onReject: (row) => setReasonModal({ doctorId: row._id, doctorName: row.name, type: 'reject' }),
 		onSuspend: (row) => setReasonModal({ doctorId: row._id, doctorName: row.name, type: 'suspend' }),
 		onReactivate: (row) => setConfirmModal({ doctorId: row._id, doctorName: row.name, type: 'unsuspend' }),
+		onCancelDeletion: (row) => setConfirmModal({ doctorId: row._id, doctorName: row.name, type: 'cancel-deletion' }),
+		onFinalizeDeletion: (row) => setConfirmModal({ doctorId: row._id, doctorName: row.name, type: 'finalize-deletion' }),
 	}), [actionLoading]);
 
 	return (
@@ -118,14 +154,10 @@ const DoctorsPage = () => {
 				{confirmModal && (
 					<ConfirmModal
 						key="confirm-modal"
-						title={confirmModal.type === 'verify' ? `Approve Dr. ${confirmModal.doctorName}?` : `Reactivate Dr. ${confirmModal.doctorName}?`}
-						message={
-							confirmModal.type === 'verify'
-								? 'This doctor will be able to go live and accept consultations immediately.'
-								: 'This lifts the suspension and restores their account to approved status.'
-						}
-						confirmLabel={confirmModal.type === 'verify' ? 'Approve' : 'Reactivate'}
-						danger={false}
+						title={CONFIRM_COPY[confirmModal.type].title(confirmModal.doctorName)}
+						message={CONFIRM_COPY[confirmModal.type].message}
+						confirmLabel={CONFIRM_COPY[confirmModal.type].confirmLabel}
+						danger={CONFIRM_COPY[confirmModal.type].danger}
 						loading={actionLoading === confirmModal.doctorId}
 						onClose={() => setConfirmModal(null)}
 						onConfirm={handleConfirmAction}

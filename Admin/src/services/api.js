@@ -43,7 +43,7 @@ export const apiGetMe = () =>
 
 /**
  * GET /doctors
- * @param {{ status?: string, search?: string, page?: number, limit?: number }} params
+ * @param {{ status?: string, accountStatus?: string, search?: string, page?: number, limit?: number }} params
  * → { success, total, page, pages, doctors[] }
  */
 export const apiGetDoctors = (params = {}) => {
@@ -53,7 +53,7 @@ export const apiGetDoctors = (params = {}) => {
 	return fetch(`${BASE}/doctors${qs ? `?${qs}` : ''}`, { headers: headers() }).then(handle);
 };
 
-/** GET /doctors/stats → { success, stats: { total, pending, verified, rejected, suspended } } */
+/** GET /doctors/stats → { success, stats: { total, pending, verified, rejected, suspended, pendingDeletion, deleted } } */
 export const apiGetDoctorStats = () =>
 	fetch(`${BASE}/doctors/stats`, { headers: headers() }).then(handle);
 
@@ -93,13 +93,21 @@ export const apiSuspendDoctor = (id, reason) =>
 export const apiUnsuspendDoctor = (id) =>
 	fetch(`${BASE}/doctors/${id}/unsuspend`, { method: 'PATCH', headers: headers() }).then(handle);
 
+/** PATCH /doctors/:id/cancel-deletion → { success, message, doctor } */
+export const apiCancelDoctorDeletion = (id) =>
+	fetch(`${BASE}/doctors/${id}/cancel-deletion`, { method: 'PATCH', headers: headers() }).then(handle);
+
+/** PATCH /doctors/:id/finalize-deletion → { success, message, doctor } */
+export const apiFinalizeDoctorDeletion = (id) =>
+	fetch(`${BASE}/doctors/${id}/finalize-deletion`, { method: 'PATCH', headers: headers() }).then(handle);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PATIENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * GET /admin/patients
- * @param {{ status?: string, search?: string, page?: number, limit?: number }} params
+ * @param {{ status?: string, accountStatus?: string, search?: string, page?: number, limit?: number }} params
  * → { success, total, page, pages, patients[] }
  */
 export const apiGetPatients = (params = {}) => {
@@ -109,7 +117,7 @@ export const apiGetPatients = (params = {}) => {
 	return fetch(`${BASE}/admin/patients${qs ? `?${qs}` : ''}`, { headers: headers() }).then(handle);
 };
 
-/** GET /admin/patients/stats → { success, stats: { total, active, suspended, profileComplete } } */
+/** GET /admin/patients/stats → { success, stats: { total, active, suspended, profileComplete, pendingDeletion, deleted } } */
 export const apiGetPatientStats = () =>
 	fetch(`${BASE}/admin/patients/stats`, { headers: headers() }).then(handle);
 
@@ -124,6 +132,14 @@ export const apiSuspendPatient = (id) =>
 /** PATCH /admin/patients/:id/unsuspend → { success, message, patient } */
 export const apiUnsuspendPatient = (id) =>
 	fetch(`${BASE}/admin/patients/${id}/unsuspend`, { method: 'PATCH', headers: headers() }).then(handle);
+
+/** PATCH /admin/patients/:id/cancel-deletion → { success, message, patient } */
+export const apiCancelPatientDeletion = (id) =>
+	fetch(`${BASE}/admin/patients/${id}/cancel-deletion`, { method: 'PATCH', headers: headers() }).then(handle);
+
+/** PATCH /admin/patients/:id/finalize-deletion → { success, message, patient } */
+export const apiFinalizePatientDeletion = (id) =>
+	fetch(`${BASE}/admin/patients/${id}/finalize-deletion`, { method: 'PATCH', headers: headers() }).then(handle);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUPPORT TICKETS
@@ -258,3 +274,4 @@ export const apiRegisterDeviceToken = (token, platform = 'web') =>
 		headers: headers(),
 		body: JSON.stringify({ token, platform }),
 	}).then(handle);
+	

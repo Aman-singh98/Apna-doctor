@@ -1,15 +1,19 @@
 const Doctor = require('../models/Doctor');
 const { notify } = require('../utils/notify');
+const { anonymizeDoctor } = require('../jobs/accountDeletionJob');
 
 // GET /api/doctors — status: pending|approved|rejected|suspended, search, page, limit
+// accountStatus: active|pending_deletion|deleted — separate dimension from
+// approvalStatus, since a doctor can be mid-deletion while still 'approved'.
 const getAllDoctors = async (req, res, next) => {
 	try {
-		const { status, search, page = 1, limit = 10 } = req.query;
+		const { status, search, accountStatus, page = 1, limit = 10 } = req.query;
 
 		// Default view excludes 'not_started' — those doctors haven't submitted
 		// anything for review yet, so they shouldn't clutter the admin queue.
 		const filter = { approvalStatus: { $ne: 'not_started' } };
 		if (status) filter.approvalStatus = status;
+		if (accountStatus) filter.accountStatus = accountStatus;
 
 		if (search) {
 			filter.$or = [
@@ -54,6 +58,13 @@ const getDoctorStats = async (req, res, next) => {
 			result[_id] = count;
 			result.total += count;
 		});
+
+		const [pendingDeletion, deleted] = await Promise.all([
+			Doctor.countDocuments({ accountStatus: 'pending_deletion' }),
+			Doctor.countDocuments({ accountStatus: 'deleted' }),
+		]);
+		result.pendingDeletion = pendingDeletion;
+		result.deleted = deleted;
 
 		res.status(200).json({ success: true, stats: result });
 	} catch (err) {
@@ -233,7 +244,81 @@ const unsuspendDoctor = async (req, res, next) => {
 	}
 };
 
+// PATCH /api/doctors/:id/cancel-deletion
+// Admin override of the self-service "cancel deletion" (controllers/
+// accountDeletionController.js:cancelDoctorDeletion) — e.g. doctor asked
+// support to undo it for them.
+const cancelDoctorDeletion = async (req, res, next) => {
+	try {
+		const doctor = await Doctor.findById(req.params.id);
+		if (!doctor) {
+			return res.status(404).json({ success: false, message: 'Doctor not found.' });
+		}
+		if (doctor.accountStatus !== 'pending_deletion') {
+			return res.status(400).json({
+				success: false,
+				message: 'This doctor does not have a scheduled deletion to cancel.',
+			});
+		}
+
+		doctor.accountStatus = 'active';
+		doctor.deletionRequestedAt = undefined;
+		doctor.deletionScheduledAt = undefined;
+		doctor.available = true;
+		doctor.reviewedBy = req.admin.id;
+		doctor.reviewedAt = new Date();
+		await doctor.save();
+
+		await notify({
+			recipientId: doctor._id,
+			recipientRole: 'doctor',
+			type: 'system',
+			title: '✅ Account Deletion Cancelled',
+			desc: 'Our support team has cancelled your scheduled account deletion. Welcome back!',
+			meta: { doctorId: doctor._id },
+		});
+
+		res.status(200).json({
+			success: true,
+			message: `Dr. ${doctor.name}'s scheduled deletion has been cancelled.`,
+			doctor,
+		});
+	} catch (err) {
+		next(err);
+	}
+};
+
+// PATCH /api/doctors/:id/finalize-deletion
+// Skips the remaining grace period and anonymizes the account immediately.
+// Only allowed on accounts already in pending_deletion.
+const finalizeDoctorDeletionNow = async (req, res, next) => {
+	try {
+		const doctor = await Doctor.findById(req.params.id);
+		if (!doctor) {
+			return res.status(404).json({ success: false, message: 'Doctor not found.' });
+		}
+		if (doctor.accountStatus !== 'pending_deletion') {
+			return res.status(400).json({
+				success: false,
+				message: 'Only accounts with a pending deletion request can be finalized early.',
+			});
+		}
+
+		const name = doctor.name;
+		await anonymizeDoctor(doctor);
+
+		res.status(200).json({
+			success: true,
+			message: `Dr. ${name}'s account has been permanently deleted.`,
+			doctor,
+		});
+	} catch (err) {
+		next(err);
+	}
+};
+
 module.exports = {
 	getAllDoctors, getDoctorStats, getDoctorById,
 	verifyDoctor, rejectDoctor, suspendDoctor, unsuspendDoctor,
+	cancelDoctorDeletion, finalizeDoctorDeletionNow,
 };

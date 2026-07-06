@@ -1,4 +1,6 @@
-// Admin: list patients, view details, suspend / reactivate.
+// Admin: list patients, view details, suspend / reactivate, and manage the
+// self-service account-deletion lifecycle (cancel a scheduled deletion, or
+// force-finalize one early).
 // All data comes from the real backend via services/api.js.
 //
 // Structured the same way as DoctorsPage.jsx: data lives in usePatients,
@@ -18,20 +20,20 @@ import PatientDetailModal from '../components/patients/PatientDetailModal';
 import { getPatientColumns } from '../components/patients/patientColumns';
 import usePatients from '../hooks/usePatients';
 
-const FILTER_TABS = ['All', 'Active', 'Suspended'];
+const FILTER_TABS = ['All', 'Active', 'Suspended', 'Pending Deletion', 'Deleted'];
 
 const PatientsPage = () => {
 	const [tab, setTab] = useState('All');
 	const [search, setSearch] = useState('');
 	const [page, setPage] = useState(1);
 
-	// { patientId, patientName, type: 'suspend' | 'unsuspend' }
+	// { patientId, patientName, type: 'suspend' | 'unsuspend' | 'cancel-deletion' | 'finalize-deletion' }
 	const [confirmModal, setConfirmModal] = useState(null);
 	const [detailId, setDetailId] = useState(null);
 
 	const {
 		patients, total, pages, fetchLoading, actionLoading,
-		suspendPatient, unsuspendPatient,
+		suspendPatient, unsuspendPatient, cancelPatientDeletion, finalizePatientDeletion,
 	} = usePatients({ tab, search, page });
 
 	// Reset to page 1 whenever the filter or search term changes.
@@ -39,9 +41,13 @@ const PatientsPage = () => {
 
 	const handleConfirmAction = async () => {
 		const { patientId, patientName, type } = confirmModal;
-		const succeeded = type === 'suspend'
-			? await suspendPatient(patientId, patientName)
-			: await unsuspendPatient(patientId, patientName);
+		const action = {
+			suspend: suspendPatient,
+			unsuspend: unsuspendPatient,
+			'cancel-deletion': cancelPatientDeletion,
+			'finalize-deletion': finalizePatientDeletion,
+		}[type];
+		const succeeded = await action(patientId, patientName);
 		if (succeeded) setConfirmModal(null);
 	};
 
@@ -50,7 +56,36 @@ const PatientsPage = () => {
 		onView: (row) => setDetailId(row._id),
 		onSuspend: (row) => setConfirmModal({ patientId: row._id, patientName: row.name || row.phone, type: 'suspend' }),
 		onReactivate: (row) => setConfirmModal({ patientId: row._id, patientName: row.name || row.phone, type: 'unsuspend' }),
+		onCancelDeletion: (row) => setConfirmModal({ patientId: row._id, patientName: row.name || row.phone, type: 'cancel-deletion' }),
+		onFinalizeDeletion: (row) => setConfirmModal({ patientId: row._id, patientName: row.name || row.phone, type: 'finalize-deletion' }),
 	}), [actionLoading]);
+
+	const CONFIRM_COPY = {
+		suspend: {
+			title: (name) => `Suspend ${name}?`,
+			message: 'This will prevent the patient from booking or accessing consultations until reactivated.',
+			confirmLabel: 'Suspend',
+			danger: true,
+		},
+		unsuspend: {
+			title: (name) => `Reactivate ${name}?`,
+			message: "This lifts the suspension and restores the patient's account.",
+			confirmLabel: 'Reactivate',
+			danger: false,
+		},
+		'cancel-deletion': {
+			title: (name) => `Cancel scheduled deletion for ${name}?`,
+			message: "This restores the patient's account to active and cancels the pending deletion. The patient will be able to use their account normally again.",
+			confirmLabel: 'Cancel Deletion',
+			danger: false,
+		},
+		'finalize-deletion': {
+			title: (name) => `Permanently delete ${name} now?`,
+			message: 'This skips the remaining grace period and anonymizes the account immediately. This cannot be undone.',
+			confirmLabel: 'Delete Now',
+			danger: true,
+		},
+	};
 
 	return (
 		<div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -89,14 +124,10 @@ const PatientsPage = () => {
 				{confirmModal && (
 					<ConfirmModal
 						key="confirm-modal"
-						title={confirmModal.type === 'suspend' ? `Suspend ${confirmModal.patientName}?` : `Reactivate ${confirmModal.patientName}?`}
-						message={
-							confirmModal.type === 'suspend'
-								? 'This will prevent the patient from booking or accessing consultations until reactivated.'
-								: "This lifts the suspension and restores the patient's account."
-						}
-						confirmLabel={confirmModal.type === 'suspend' ? 'Suspend' : 'Reactivate'}
-						danger={confirmModal.type === 'suspend'}
+						title={CONFIRM_COPY[confirmModal.type].title(confirmModal.patientName)}
+						message={CONFIRM_COPY[confirmModal.type].message}
+						confirmLabel={CONFIRM_COPY[confirmModal.type].confirmLabel}
+						danger={CONFIRM_COPY[confirmModal.type].danger}
 						loading={actionLoading === confirmModal.patientId}
 						onClose={() => setConfirmModal(null)}
 						onConfirm={handleConfirmAction}

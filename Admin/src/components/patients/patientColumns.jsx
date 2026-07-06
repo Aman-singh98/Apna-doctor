@@ -1,9 +1,11 @@
 // ─── components/patients/patientColumns.jsx ────────────────────────────────
 // Column config for PatientsPage's Table. Mirrors doctorColumns.js: a view
 // (eye icon) action plus a suspend/reactivate action, both using the shared
-// ActionButton component.
+// ActionButton component. Also surfaces the self-service account-deletion
+// lifecycle (accountStatus) — a separate dimension from the suspend/active
+// `status` field — with admin override actions.
 
-import { Eye, Ban, CheckCircle } from 'lucide-react';
+import { Eye, Ban, CheckCircle, Undo2, Trash2 } from 'lucide-react';
 import ActionButton from '../common/ActionButton';
 import Badge from '../ui/Badge';
 
@@ -27,13 +29,23 @@ function formatDate(iso) {
    return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function deletionLabel(accountStatus) {
+   if (accountStatus === 'pending_deletion') return 'Pending Deletion';
+   if (accountStatus === 'deleted') return 'Deleted';
+   return null;
+}
+
 /**
- * @param {string}   actionLoadingId — _id of the patient currently mid-action
- * @param {function} onView          — (row) => void — open PatientDetailModal
- * @param {function} onSuspend       — (row) => void — open ConfirmModal (suspend)
- * @param {function} onReactivate    — (row) => void — open ConfirmModal (unsuspend)
+ * @param {string}   actionLoadingId    — _id of the patient currently mid-action
+ * @param {function} onView             — (row) => void — open PatientDetailModal
+ * @param {function} onSuspend          — (row) => void — open ConfirmModal (suspend)
+ * @param {function} onReactivate       — (row) => void — open ConfirmModal (unsuspend)
+ * @param {function} onCancelDeletion   — (row) => void — open ConfirmModal (cancel scheduled deletion)
+ * @param {function} onFinalizeDeletion — (row) => void — open ConfirmModal (delete now)
  */
-export function getPatientColumns({ actionLoadingId, onView, onSuspend, onReactivate }) {
+export function getPatientColumns({
+   actionLoadingId, onView, onSuspend, onReactivate, onCancelDeletion, onFinalizeDeletion,
+}) {
    return [
       {
          key: 'name', label: 'Patient',
@@ -49,37 +61,69 @@ export function getPatientColumns({ actionLoadingId, onView, onSuspend, onReacti
          key: 'hasCompletedProfile', label: 'Profile',
          render: v => <Badge status={v ? 'verified' : 'pending'} label={v ? 'Complete' : 'Incomplete'} />,
       },
-      { key: 'status', label: 'Status', render: v => <Badge status={v} /> },
+      {
+         key: 'status', label: 'Status',
+         render: (v, row) => (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+               <Badge status={v} />
+               {deletionLabel(row.accountStatus) && (
+                  <Badge status={row.accountStatus} label={deletionLabel(row.accountStatus)} />
+               )}
+            </div>
+         ),
+      },
       {
          key: 'actions', label: 'Actions',
          render: (_, row) => {
             const isLoading = actionLoadingId === row._id;
             return (
-               <div style={{ display: 'flex', gap: 6 }}>
+               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   <ActionButton
                      icon={Eye}
                      color="var(--blue-primary)"
                      label="View"
                      onClick={() => onView(row)}
                   />
-                  {row.status === 'suspended' ? (
-                     <ActionButton
-                        icon={CheckCircle}
-                        color="var(--green-success)"
-                        label="Reactivate"
-                        onClick={() => onReactivate(row)}
-                        disabled={isLoading}
-                        spinning={isLoading}
-                     />
-                  ) : (
-                     <ActionButton
-                        icon={Ban}
-                        color="var(--red-danger)"
-                        label="Suspend"
-                        onClick={() => onSuspend(row)}
-                        disabled={isLoading}
-                        spinning={isLoading}
-                     />
+
+                  {row.accountStatus === 'pending_deletion' ? (
+                     <>
+                        <ActionButton
+                           icon={Undo2}
+                           color="var(--blue-primary)"
+                           label="Cancel Deletion"
+                           onClick={() => onCancelDeletion(row)}
+                           disabled={isLoading}
+                           spinning={isLoading}
+                        />
+                        <ActionButton
+                           icon={Trash2}
+                           color="var(--red-danger)"
+                           label="Delete Now"
+                           onClick={() => onFinalizeDeletion(row)}
+                           disabled={isLoading}
+                           spinning={isLoading}
+                        />
+                     </>
+                  ) : row.accountStatus === 'deleted' ? null : (
+                     row.status === 'suspended' ? (
+                        <ActionButton
+                           icon={CheckCircle}
+                           color="var(--green-success)"
+                           label="Reactivate"
+                           onClick={() => onReactivate(row)}
+                           disabled={isLoading}
+                           spinning={isLoading}
+                        />
+                     ) : (
+                        <ActionButton
+                           icon={Ban}
+                           color="var(--red-danger)"
+                           label="Suspend"
+                           onClick={() => onSuspend(row)}
+                           disabled={isLoading}
+                           spinning={isLoading}
+                        />
+                     )
                   )}
                </div>
             );

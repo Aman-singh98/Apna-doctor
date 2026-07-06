@@ -1,14 +1,27 @@
 // Data + actions for PatientsPage. Mirrors hooks/useDoctors.js: fetch/search/
-// paginate patients, plus suspend/unsuspend actions with per-row loading state.
+// paginate patients, plus suspend/unsuspend and deletion-override actions
+// with per-row loading state.
 
 import { useEffect, useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { apiGetPatients, apiSuspendPatient, apiUnsuspendPatient } from '../services/api';
+import {
+   apiGetPatients,
+   apiSuspendPatient,
+   apiUnsuspendPatient,
+   apiCancelPatientDeletion,
+   apiFinalizePatientDeletion,
+} from '../services/api';
 
-const TAB_TO_STATUS = {
-   All: '',
-   Active: 'active',
-   Suspended: 'suspended',
+// Two separate dimensions on a patient:
+//  - `status`        : active | suspended            (suspend/reactivate)
+//  - `accountStatus` : active | pending_deletion | deleted (self-service deletion)
+// Tabs map to whichever query param is relevant for that filter.
+const TAB_TO_PARAMS = {
+   All: {},
+   Active: { status: 'active' },
+   Suspended: { status: 'suspended' },
+   'Pending Deletion': { accountStatus: 'pending_deletion' },
+   Deleted: { accountStatus: 'deleted' },
 };
 
 export default function usePatients({ tab, search, page, limit = 10 }) {
@@ -16,15 +29,15 @@ export default function usePatients({ tab, search, page, limit = 10 }) {
    const [total, setTotal] = useState(0);
    const [pages, setPages] = useState(1);
    const [fetchLoading, setFetchLoading] = useState(true);
-   // Holds the _id of the patient currently being acted on (suspend/unsuspend),
-   // so the row's action button and any open modal can show a spinner.
+   // Holds the _id of the patient currently being acted on, so the row's
+   // action button and any open modal can show a spinner.
    const [actionLoading, setActionLoading] = useState(null);
 
    const fetchPatients = useCallback(async () => {
       setFetchLoading(true);
       try {
          const data = await apiGetPatients({
-            status: TAB_TO_STATUS[tab] ?? '',
+            ...(TAB_TO_PARAMS[tab] ?? {}),
             search,
             page,
             limit,
@@ -76,6 +89,36 @@ export default function usePatients({ tab, search, page, limit = 10 }) {
       }
    };
 
+   const cancelPatientDeletion = async (patientId, patientName) => {
+      setActionLoading(patientId);
+      try {
+         await apiCancelPatientDeletion(patientId);
+         toast.success(`${patientName}'s scheduled deletion has been cancelled`);
+         await fetchPatients();
+         return true;
+      } catch (err) {
+         toast.error(err.message || 'Failed to cancel deletion');
+         return false;
+      } finally {
+         setActionLoading(null);
+      }
+   };
+
+   const finalizePatientDeletion = async (patientId, patientName) => {
+      setActionLoading(patientId);
+      try {
+         await apiFinalizePatientDeletion(patientId);
+         toast.success(`${patientName}'s account has been permanently deleted`);
+         await fetchPatients();
+         return true;
+      } catch (err) {
+         toast.error(err.message || 'Failed to finalize deletion');
+         return false;
+      } finally {
+         setActionLoading(null);
+      }
+   };
+
    return {
       patients,
       total,
@@ -84,5 +127,7 @@ export default function usePatients({ tab, search, page, limit = 10 }) {
       actionLoading,
       suspendPatient,
       unsuspendPatient,
+      cancelPatientDeletion,
+      finalizePatientDeletion,
    };
 }
