@@ -15,6 +15,7 @@
 const Appointment = require('../models/Appointment');
 const Doctor = require('../models/Doctor');
 const FamilyMember = require('../models/FamilyMember');
+const { notify } = require('../utils/notify');
 
 const DOCTOR_FIELDS = 'name specialization photoUrl';
 
@@ -80,6 +81,15 @@ exports.createAppointment = async (req, res) => {
          fee: typeof fee === 'number' ? fee : (type === 'Video' ? doctor.videoFee : type === 'Chat' ? doctor.chatFee : doctor.videoFee),
       });
 
+      await notify({
+         recipientId: doctor._id,
+         recipientRole: 'doctor',
+         type: 'appointment',
+         title: 'New Appointment Booked',
+         desc: `${patientName} booked a ${type} consultation with you.`,
+         meta: { appointmentId: appointment._id },
+      });
+
       res.status(201).json(await appointment.populate('doctor', DOCTOR_FIELDS));
    } catch (err) {
       res.status(500).json({ message: 'Failed to book appointment', error: err.message });
@@ -140,6 +150,15 @@ exports.cancelAppointment = async (req, res) => {
       appointment.cancelReason = reason;
       await appointment.save();
 
+      await notify({
+         recipientId: appointment.doctor,
+         recipientRole: 'doctor',
+         type: 'appointment',
+         title: 'Appointment Cancelled',
+         desc: `${appointment.patientName} cancelled their upcoming ${appointment.type} consultation. Reason: ${reason}`,
+         meta: { appointmentId: appointment._id },
+      });
+
       res.json(await appointment.populate('doctor', DOCTOR_FIELDS));
    } catch (err) {
       res.status(500).json({ message: 'Failed to cancel appointment', error: err.message });
@@ -165,6 +184,15 @@ exports.rescheduleAppointment = async (req, res) => {
 
       appointment.date = new Date(date);
       await appointment.save();
+
+      await notify({
+         recipientId: appointment.doctor,
+         recipientRole: 'doctor',
+         type: 'appointment',
+         title: 'Appointment Rescheduled',
+         desc: `${appointment.patientName} rescheduled their ${appointment.type} consultation to a new time.`,
+         meta: { appointmentId: appointment._id },
+      });
 
       res.json(await appointment.populate('doctor', DOCTOR_FIELDS));
    } catch (err) {

@@ -10,6 +10,7 @@
 
 const Review = require('../models/Review');
 const Appointment = require('../models/Appointment');
+const { notify } = require('../utils/notify');
 
 // POST /api/patient/reviews
 // body: { appointmentId, rating, comment }
@@ -51,6 +52,15 @@ exports.createReview = async (req, res) => {
          appointment: appointmentId,
          rating: numericRating,
          comment: (comment || '').trim(),
+      });
+
+      await notify({
+         recipientId: review.doctor,
+         recipientRole: 'doctor',
+         type: 'rating',
+         title: 'New Review Received',
+         desc: `You received a ${numericRating}★ review${review.comment ? `: "${review.comment.slice(0, 60)}"` : '.'}`,
+         meta: { reviewId: review._id, appointmentId },
       });
 
       res.status(201).json(review);

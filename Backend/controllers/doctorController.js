@@ -1,14 +1,5 @@
 const Doctor = require('../models/Doctor');
-const { messaging } = require('../config/firebaseAdmin');
-
-const sendPushNotification = async (fcmToken, title, body) => {
-	if (!fcmToken) return;
-	try {
-		await messaging.send({ token: fcmToken, notification: { title, body } });
-	} catch (err) {
-		console.error('[FCM] Failed to send notification:', err.message);
-	}
-};
+const { notify } = require('../utils/notify');
 
 // GET /api/doctors — status: pending|approved|rejected|suspended, search, page, limit
 const getAllDoctors = async (req, res, next) => {
@@ -32,7 +23,7 @@ const getAllDoctors = async (req, res, next) => {
 		const total = await Doctor.countDocuments(filter);
 
 		const doctors = await Doctor.find(filter)
-			.select('-documents -fcmToken')
+			.select('-documents')
 			.populate('reviewedBy', 'name email')
 			.sort({ createdAt: -1 })
 			.skip(skip)
@@ -101,11 +92,14 @@ const verifyDoctor = async (req, res, next) => {
 		doctor.reviewedAt = new Date();
 		await doctor.save();
 
-		await sendPushNotification(
-			doctor.fcmToken,
-			'🎉 Profile Verified!',
-			'Congratulations! Your profile has been approved. You can now start accepting consultations.'
-		);
+		await notify({
+			recipientId: doctor._id,
+			recipientRole: 'doctor',
+			type: 'system',
+			title: '🎉 Profile Verified!',
+			desc: 'Congratulations! Your profile has been approved. You can now start accepting consultations.',
+			meta: { doctorId: doctor._id },
+		});
 
 		res.status(200).json({
 			success: true,
@@ -139,11 +133,14 @@ const rejectDoctor = async (req, res, next) => {
 		doctor.reviewedAt = new Date();
 		await doctor.save();
 
-		await sendPushNotification(
-			doctor.fcmToken,
-			'❌ Verification Unsuccessful',
-			`Your profile verification was unsuccessful. Reason: ${reason.trim()}. Please re-upload your documents.`
-		);
+		await notify({
+			recipientId: doctor._id,
+			recipientRole: 'doctor',
+			type: 'system',
+			title: '❌ Verification Unsuccessful',
+			desc: `Your profile verification was unsuccessful. Reason: ${reason.trim()}. Please re-upload your documents.`,
+			meta: { doctorId: doctor._id },
+		});
 
 		res.status(200).json({
 			success: true,
@@ -181,11 +178,14 @@ const suspendDoctor = async (req, res, next) => {
 		doctor.reviewedAt = new Date();
 		await doctor.save();
 
-		await sendPushNotification(
-			doctor.fcmToken,
-			'⚠️ Account Suspended',
-			`Your account has been temporarily suspended. Reason: ${reason.trim()}. Contact support for assistance.`
-		);
+		await notify({
+			recipientId: doctor._id,
+			recipientRole: 'doctor',
+			type: 'system',
+			title: '⚠️ Account Suspended',
+			desc: `Your account has been temporarily suspended. Reason: ${reason.trim()}. Contact support for assistance.`,
+			meta: { doctorId: doctor._id },
+		});
 
 		res.status(200).json({
 			success: true,
@@ -214,11 +214,14 @@ const unsuspendDoctor = async (req, res, next) => {
 		doctor.reviewedAt = new Date();
 		await doctor.save();
 
-		await sendPushNotification(
-			doctor.fcmToken,
-			'✅ Account Reactivated',
-			'Your account suspension has been lifted. You can now resume accepting consultations.'
-		);
+		await notify({
+			recipientId: doctor._id,
+			recipientRole: 'doctor',
+			type: 'system',
+			title: '✅ Account Reactivated',
+			desc: 'Your account suspension has been lifted. You can now resume accepting consultations.',
+			meta: { doctorId: doctor._id },
+		});
 
 		res.status(200).json({
 			success: true,
