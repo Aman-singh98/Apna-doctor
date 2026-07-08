@@ -13,6 +13,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
    ActivityIndicator,
    Alert,
+   PermissionsAndroid,
+   Platform,
    StatusBar,
    StyleSheet,
    Text,
@@ -30,6 +32,19 @@ import {
 import { fetchAgoraToken } from '../../services/agoraService';
 
 const TEAL = '#1A7E8A';
+
+// Android requires an explicit runtime grant for mic/camera even when the
+// permission is declared in app.json — the manifest entry alone does NOT
+// grant access, it only allows the app to ask. Without this, Agora's
+// engine.joinChannel() succeeds (signaling still connects — "Live" shows up),
+// but actual audio/video capture is silently blocked by the OS.
+async function requestCallPermissions(needsCamera) {
+   if (Platform.OS !== 'android') return true; // iOS handles this via Info.plist prompts automatically
+   const perms = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+   if (needsCamera) perms.push(PermissionsAndroid.PERMISSIONS.CAMERA);
+   const granted = await PermissionsAndroid.requestMultiple(perms);
+   return Object.values(granted).every((v) => v === PermissionsAndroid.RESULTS.GRANTED);
+}
 
 export default function ConsultationCallScreen() {
    const router = useRouter();
@@ -69,6 +84,17 @@ export default function ConsultationCallScreen() {
             const data = await fetchAgoraToken(appointmentId, 'patient');
             if (!mounted) return;
             setCallInfo(data);
+
+            const permsGranted = await requestCallPermissions(data.appointmentType === 'Video');
+            if (!mounted) return;
+            if (!permsGranted) {
+               Alert.alert(
+                  'Permission required',
+                  `Please allow microphone${data.appointmentType === 'Video' ? ' and camera' : ''} access to join this consultation.`,
+                  [{ text: 'OK', onPress: () => router.back() }]
+               );
+               return;
+            }
 
             const engine = createAgoraRtcEngine();
             engineRef.current = engine;

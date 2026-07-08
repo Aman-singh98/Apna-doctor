@@ -1,74 +1,76 @@
 {
-  "expo": {
-    "name": "Apnadoctor",
-    "slug": "Apnadoctor",
-    "version": "1.0.0",
-    "orientation": "portrait",
-    "icon": "./assets/playstore-icon-512.png",
-    "scheme": "apnadoctor",
-    "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.aman_singh001.apnadoctor",
-      "googleServicesFile": "./GoogleService-Info.plist",
-      "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "ApnaDoctor needs access to your photos so you can set your profile picture."
-      }
-    },
-    "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/playstore-icon-512.png",
-        "backgroundImage": "./assets/playstore-icon-512.png",
-        "monochromeImage": "./assets/playstore-icon-512.png"
-      },
-      "predictiveBackGestureEnabled": false,
-      "package": "com.aman_singh001.Apnadoctor",
-      "googleServicesFile": "./google-services.json",
-      "permissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
-    },
-    "web": {
-      "output": "static",
-      "favicon": "./assets/playstore-icon-512.png"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "backgroundColor": "#208AEF",
-          "android": {
-            "image": "./assets/playstore-icon-512.png",
-            "imageWidth": 76
-          }
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "ApnaDoctor needs access to your photos so you can set your profile picture."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/playstore-icon-512.png",
-          "color": "#1A7E8A"
-        }
-      ]
-    ],
-    "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
-    },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "ae5e64dd-82ea-48b2-8363-d52dd300f495"
-      }
-    },
-    "owner": "aman_singh001"
-  }
+	"expo": {
+		"name": "Apnadoctor",
+		"slug": "Apnadoctor",
+		"version": "1.0.0",
+		"orientation": "portrait",
+		"icon": "./assets/playstore-icon-512.png",
+		"scheme": "apnadoctor",
+		"userInterfaceStyle": "automatic",
+		"ios": {
+			"icon": "./assets/expo.icon",
+			"bundleIdentifier": "com.aman_singh001.apnadoctor",
+			"googleServicesFile": "./GoogleService-Info.plist",
+			"infoPlist": {
+				"NSPhotoLibraryUsageDescription": "ApnaDoctor needs access to your photos so you can set your profile picture."
+			}
+		},
+		"android": {
+			"adaptiveIcon": {
+				"backgroundColor": "#E6F4FE",
+				"foregroundImage": "./assets/playstore-icon-512.png",
+				"backgroundImage": "./assets/playstore-icon-512.png",
+				"monochromeImage": "./assets/playstore-icon-512.png"
+			},
+			"predictiveBackGestureEnabled": false,
+			"package": "com.aman_singh001.Apnadoctor",
+			"googleServicesFile": "./google-services.json",
+			"permissions": [
+				"android.permission.RECORD_AUDIO",
+				"android.permission.CAMERA",
+				"android.permission.MODIFY_AUDIO_SETTINGS"
+			]
+		},
+		"web": {
+			"output": "static",
+			"favicon": "./assets/playstore-icon-512.png"
+		},
+		"plugins": [
+			"expo-router",
+			[
+				"expo-splash-screen",
+				{
+					"backgroundColor": "#208AEF",
+					"android": {
+						"image": "./assets/playstore-icon-512.png",
+						"imageWidth": 76
+					}
+				}
+			],
+			[
+				"expo-image-picker",
+				{
+					"photosPermission": "ApnaDoctor needs access to your photos so you can set your profile picture."
+				}
+			],
+			[
+				"expo-notifications",
+				{
+					"icon": "./assets/playstore-icon-512.png",
+					"color": "#1A7E8A"
+				}
+			]
+		],
+		"experiments": {
+			"typedRoutes": true,
+			"reactCompiler": true
+		},
+		"extra": {
+			"router": {},
+			"eas": {
+				"projectId": "ae5e64dd-82ea-48b2-8363-d52dd300f495"
+			}
+		},
+		"owner": "aman_singh001"
+	}
 }

@@ -368,11 +368,18 @@ export default function AppointmentsScreen() {
                               <TouchableOpacity 
                                  style={[styles.btn, styles.btnPrimary]}
                                  onPress={() => {
-                                    if (a.type === 'Video') {
-                                       router.push('/patient/consultation-call');
-                                    } else {
-                                       router.push('/patient/consultation-chat');
-                                    }
+                                    const dest = (a.type === 'Video' || a.type === 'Audio')
+                                       ? '/patient/consultation-call'
+                                       : '/patient/consultation-chat';
+                                    router.push({
+                                       pathname: dest,
+                                       params: {
+                                          appointmentId: a.id,
+                                          docName: a.doctor,
+                                          spec: a.spec,
+                                          callType: a.type,
+                                       },
+                                    });
                                  }}
                               >
                                  <Text style={styles.btnPrimaryTxt}>Join</Text>

@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
    ActivityIndicator,
    Alert,
+   PermissionsAndroid,
+   Platform,
    StatusBar,
    StyleSheet,
    Text,
@@ -29,9 +31,19 @@ import {
 } from 'react-native-agora';
 
 import { fetchAgoraToken } from '../../services/agoraService';
-import { completeAppointment } from '../../src/services/appointmentService';
+import { completeAppointment } from '../../services/appointmentService';
 
 const TEAL = '#1A7E8A';
+
+// See patient/consultation-call.js for why this runtime request is required
+// even though app.json already declares these permissions.
+async function requestCallPermissions(needsCamera) {
+   if (Platform.OS !== 'android') return true;
+   const perms = [PermissionsAndroid.PERMISSIONS.RECORD_AUDIO];
+   if (needsCamera) perms.push(PermissionsAndroid.PERMISSIONS.CAMERA);
+   const granted = await PermissionsAndroid.requestMultiple(perms);
+   return Object.values(granted).every((v) => v === PermissionsAndroid.RESULTS.GRANTED);
+}
 
 export default function DoctorConsultationCallScreen() {
    const router = useRouter();
@@ -68,6 +80,17 @@ export default function DoctorConsultationCallScreen() {
             const data = await fetchAgoraToken(appointmentId, 'doctor');
             if (!mounted) return;
             setCallInfo(data);
+
+            const permsGranted = await requestCallPermissions(data.appointmentType === 'Video');
+            if (!mounted) return;
+            if (!permsGranted) {
+               Alert.alert(
+                  'Permission required',
+                  `Please allow microphone${data.appointmentType === 'Video' ? ' and camera' : ''} access to join this consultation.`,
+                  [{ text: 'OK', onPress: () => router.back() }]
+               );
+               return;
+            }
 
             const engine = createAgoraRtcEngine();
             engineRef.current = engine;

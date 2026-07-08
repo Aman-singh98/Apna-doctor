@@ -108,7 +108,7 @@ export default function DoctorAppointmentsScreen() {
 
    const startConsult = (appt) => {
       setDetailModal(false);
-      const params = { patientName: appt.name, diagnosis: appt.issue };
+      const params = { appointmentId: appt.id, patientName: appt.name, diagnosis: appt.issue };
       if (appt.type === 'Video' || appt.type === 'Audio') {
          router.push({ pathname: '/doctor/consultation-call', params });
       } else {
