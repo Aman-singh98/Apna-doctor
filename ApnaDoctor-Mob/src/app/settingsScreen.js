@@ -30,9 +30,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { requestAccountDeletion } from '../services/accountDeletion';
-// NOTE: swap these for your patient-side equivalents if the function/module
-// names differ — this mirrors clearAuthData() in utils/doctorAuth.js.
-import { clearAuthData as clearDoctorAuthData } from '../utils/doctorAuth';
+// doctorAuth.js exports its logout function as `logout` (not `clearAuthData`
+// — that name never existed and was silently resolving to `undefined`,
+// throwing "clearDoctorAuthData is not a function" the moment a doctor
+// deleted their account). Aliased here for readability alongside the
+// patient-side import below.
+import { logout as clearDoctorAuthData } from '../utils/doctorAuth';
+import { logoutPatient as clearPatientAuthData } from '../utils/patientAuth';
 
 const TEAL = '#1A7E8A';
 
@@ -99,7 +103,15 @@ export default function SettingsScreen({ role = 'patient' }) {
                      // Grace-period soft-delete: account is now pending_deletion
                      // on the server. Log the device out locally — the account
                      // record itself isn't wiped until deletionScheduledAt passes.
-                     await clearDoctorAuthData();
+                     // Clear whichever role's session actually made this request
+                     // — clearing the wrong one leaves a stale token in storage
+                     // and/or throws if that role was never logged in on this
+                     // device to begin with.
+                     if (role === 'doctor') {
+                        await clearDoctorAuthData();
+                     } else {
+                        await clearPatientAuthData();
+                     }
                      Alert.alert(
                         'Deletion Scheduled',
                         data.message || 'Your account will be permanently deleted after the grace period.',

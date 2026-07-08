@@ -1,4 +1,4 @@
-// utils/accountDeletion.js
+// services/accountDeletion.js
 //
 // Shared "Delete Account Permanently" API calls for both roles, following
 // the same pattern as doctorAuth.js (no raw API calls inside screens).

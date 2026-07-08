@@ -6,17 +6,16 @@
 //
 // WHY THIS FILE EXISTS:
 // - One place to set the base URL (from .env)
-// - One place to attach the doctor's JWT token to every request
+// - One place to attach the logged-in user's JWT token to every request
 // - One place to handle "token expired" globally
 //
-// You said login isn't built yet — that's fine. This file is ready
-// for it. Once you build login, just call:
-//     await saveToken(jwtFromLoginResponse)
-// (see authStorage.js) and every request after that will automatically
-// carry the token. You don't need to touch this file again.
+// Patient and doctor sessions are stored under separate keys in
+// authStorage.js (a device can be logged in as both at once). This
+// instance always attaches whichever role logged in most recently —
+// see authStorage.js's `active_auth_role` tracking.
 
 import axios from 'axios';
-import { getToken, clearToken } from './authStorage';
+import { getActiveToken, clearActiveToken } from './authStorage';
 
 // ── Base URL ────────────────────────────────────────────────────────────────
 // Pulled from .env (EXPO_PUBLIC_API_URL). Must be prefixed with
@@ -49,13 +48,12 @@ const api = axios.create({
    },
 });
 
-// ── Request interceptor: attach JWT token automatically ─────────────────────
-// Runs before every single request made through `api`.
-// Once you implement login and call saveToken(), this starts working
-// with zero extra code anywhere else.
+// ── Request interceptor: attach the active role's JWT automatically ─────────
+// Runs before every single request made through `api`. Reads whichever
+// token (patient or doctor) was saved most recently — see authStorage.js.
 api.interceptors.request.use(
    async (config) => {
-      const token = await getToken();
+      const token = await getActiveToken();
       if (token) {
          config.headers.Authorization = `Bearer ${token}`;
       }
@@ -66,15 +64,15 @@ api.interceptors.request.use(
 
 // ── Response interceptor: handle expired/invalid token globally ─────────────
 // If the backend ever returns 401 (Unauthorized), it usually means the
-// doctor's token expired or is invalid. We clear the stored token here.
-// Later, when you have a login/navigation setup, you can also redirect
-// to the login screen from this spot — left as a comment so you can
-// wire it in once that screen exists.
+// active token expired or is invalid. We clear the active role's stored
+// token here. Later, when you have a login/navigation setup, you can also
+// redirect to the login screen from this spot — left as a comment so you
+// can wire it in once that screen exists.
 api.interceptors.response.use(
    (response) => response,
    async (error) => {
       if (error.response?.status === 401) {
-         await clearToken();
+         await clearActiveToken();
          // Example, once you have a router ref available outside components:
          // router.replace('/login');
       }

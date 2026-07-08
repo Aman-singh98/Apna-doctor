@@ -1,7 +1,8 @@
 // app/utils/doctorAuth.js
 //
 // Central helper for the doctor auth + onboarding flow. Imported by:
-// index.js, otp.js, doctor-terms.js, doctor-signup.js, doctor-pending.js.
+// index.js, otp.js, doctor-terms.js, doctor-signup.js, doctor-pending.js,
+// settingsScreen.js.
 //
 // Endpoint paths (confirmed against server.js):
 //   POST /doctor/auth/send-otp         → doctorAuthController.sendOtpHandler
@@ -14,10 +15,14 @@
 // while doctorProfileRoutes.js (dashboard/availability) uses `doctorProtect`
 // (valid token + approved). It isn't mounted in server.js yet — see the
 // server.js change needed alongside this file.
+//
+// Token storage: uses the doctor-specific slot in authStorage.js
+// (saveDoctorToken/clearDoctorToken) — separate from the patient token, so
+// logging into one role never overwrites the other's session.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
-import { clearToken, saveToken } from '../services/authStorage';
+import { clearDoctorToken, saveDoctorToken } from '../services/authStorage';
 
 const DEV_APPROVED_KEY = '__dev_doctor_approved__';
 
@@ -27,15 +32,16 @@ export async function sendOtp(phone) {
    return data;
 }
 
-// Verifies OTP, saves the JWT, and returns the doctor object
-// { hasAcceptedTerms, approvalStatus } straight from the server response,
-// exactly as otp.js expects — no second request needed.
+// Verifies OTP, saves the JWT under the doctor-specific storage key, and
+// returns the doctor object { hasAcceptedTerms, approvalStatus } straight
+// from the server response, exactly as otp.js expects — no second request
+// needed.
 export async function verifyOtp(phone, otp) {
    const { data } = await api.post('/doctor/auth/verify-otp', { phone, otp });
    if (!data?.token) {
       throw new Error('No token returned from server.');
    }
-   await saveToken(data.token);
+   await saveDoctorToken(data.token);
    return data.doctor;
 }
 
@@ -92,7 +98,10 @@ export async function __devApproveDoctor() {
    await AsyncStorage.setItem(DEV_APPROVED_KEY, 'true');
 }
 
+// Call on doctor logout / account deletion. Named `logout` (not
+// `clearAuthData`) — settingsScreen.js must import it as
+// `import { logout as clearDoctorAuthData } from '../utils/doctorAuth'`.
 export async function logout() {
-   await clearToken();
+   await clearDoctorToken();
    await AsyncStorage.removeItem(DEV_APPROVED_KEY);
 }

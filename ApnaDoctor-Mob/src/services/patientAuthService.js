@@ -1,23 +1,17 @@
-// Used by: app/otp.js, app/patient-terms.js, app/patient-signup.js
+// Used by: app/otp.js, app/patient-terms.js, app/patient-signup.js,
+// app/settingsScreen.js (via utils/patientAuth.js re-export)
 //
 // Patient-side auth actions — sendOtp, verifyOtp, acceptTerms, signup.
 //
-// IMPORTANT: this uses the same shared `api` instance and the same token
-// storage (authStorage.js) as the rest of the app — NOT a separate patient
-// token key. api.js only attaches a token by calling authStorage.getToken(),
-// so verifyOtp() below saves the token via authStorage.saveToken(). If a
-// patient's token were stored anywhere else, every authenticated request
-// (accept-terms, signup, and any future patient-protected route) would go
-// out with no Authorization header and fail with 401.
-//
-// This also means a device is effectively logged in as ONE identity at a
-// time (whichever token was last saved — doctor or patient). That matches
-// the login screen's role switcher (pick doctor or patient, then log in),
-// so it should be fine — but flagging it in case the app ever needs a
-// doctor and patient session active simultaneously on the same device.
+// Token storage: uses the patient-specific slot in authStorage.js
+// (savePatientToken/clearPatientToken) — separate from the doctor token,
+// so logging into one role never overwrites the other's session. The
+// shared `api` instance always attaches whichever role logged in most
+// recently (see authStorage.js's `active_auth_role` tracking), so no extra
+// wiring is needed on any individual request here.
 
 import api from './api';
-import { saveToken, clearToken } from './authStorage';
+import { savePatientToken, clearPatientToken } from './authStorage';
 
 // POST /patient/auth/send-otp
 // body: { phone }
@@ -28,12 +22,13 @@ export async function sendOtp(phone) {
 
 // POST /patient/auth/verify-otp
 // body: { phone, otp } → { token, hasAcceptedTerms, hasCompletedProfile }
-// Saves the token via authStorage so the shared `api` instance starts
-// attaching it to every request automatically — no extra wiring needed.
+// Saves the token under the patient-specific storage key so the shared
+// `api` instance starts attaching it to every request automatically once
+// this becomes the active role — no extra wiring needed.
 export async function verifyOtp(phone, otp) {
    const { data } = await api.post('/patient/auth/verify-otp', { phone, otp });
    if (data?.token) {
-      await saveToken(data.token);
+      await savePatientToken(data.token);
    }
    return data;
 }
@@ -51,7 +46,7 @@ export async function submitPatientSignup(payload) {
    return data;
 }
 
-// Call on patient logout.
+// Call on patient logout / account deletion.
 export async function logoutPatient() {
-   await clearToken();
+   await clearPatientToken();
 }
