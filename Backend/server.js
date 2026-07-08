@@ -99,6 +99,9 @@ const patientNotificationRoutes = require('./routes/patientNotifications');
 // doctorProtect (so also requires approved status, like the other doctor routes).
 const doctorNotificationRoutes = require('./routes/doctorNotifications');
 
+const consultationRoutes = require('./routes/consultationRoutes');
+const patientConsultationRoutes = require('./routes/patientConsultationRoutes');
+
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 // ── Connect to MongoDB ────────────────────────────────────────────────────────
@@ -292,6 +295,9 @@ app.use('/api/admin/tickets', adminTicketRoutes);
 // DELETE /api/admin/notifications/clear           (requires admin JWT)
 // POST   /api/admin/notifications/device-token    (requires admin JWT)
 app.use('/api/admin/notifications', adminNotificationRoutes);
+
+app.use('/api/consultation', consultationRoutes);
+app.use('/api/patient/consultation', patientConsultationRoutes);
 
 // ── Error Handling (must be last) ─────────────────────────────────────────────
 app.use(notFound);
