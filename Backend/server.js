@@ -103,6 +103,7 @@ const consultationRoutes = require('./routes/consultationRoutes');
 const patientConsultationRoutes = require('./routes/patientConsultationRoutes');
 
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const chatTokenRoutes = require('./routes/chatTokenRoutes');
 
 // ── Connect to MongoDB ────────────────────────────────────────────────────────
 connectDB();
@@ -298,6 +299,12 @@ app.use('/api/admin/notifications', adminNotificationRoutes);
 
 app.use('/api/consultation', consultationRoutes);
 app.use('/api/patient/consultation', patientConsultationRoutes);
+
+// ── Chat Firebase Token Routes ────────────────────────────────────────────────
+// GET /api/doctor/chat/firebase-token   (requires doctor JWT)
+// GET /api/patient/chat/firebase-token  (requires patient JWT)
+app.use('/api/doctor/chat', chatTokenRoutes.doctorRouter);
+app.use('/api/patient/chat', chatTokenRoutes.patientRouter);
 
 // ── Error Handling (must be last) ─────────────────────────────────────────────
 app.use(notFound);

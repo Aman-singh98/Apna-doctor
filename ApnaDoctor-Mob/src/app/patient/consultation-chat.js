@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+   ActivityIndicator,
    Alert,
    KeyboardAvoidingView, Platform,
    ScrollView,
@@ -13,105 +14,119 @@ import {
    View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ensureFirebaseSignedIn, ensureChatDoc, subscribeToMessages, sendMessage } from '../../services/chatService';
+import { getMyPatientProfile } from '../../services/patientProfileService'; // GET /patient/me → { _id, name, ... }
 
 const TEAL = '#1A7E8A';
+
+const formatTime = (ts) => {
+   if (!ts) return '';
+   const d = ts.toDate ? ts.toDate() : new Date(ts);
+   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
 
 export default function ConsultationChatScreen() {
    const router = useRouter();
    const params = useLocalSearchParams();
    const insets = useSafeAreaInsets();
-   
+
+   // Whatever screen navigates a patient into this chat (appointment detail,
+   // "message my doctor", etc.) needs to pass appointmentId + doctorId along
+   // with docName/spec — the same way doctor/appointments.js already passes
+   // appointmentId on the doctor side.
+   const { appointmentId, doctorId } = params;
    const docName = params.docName || 'Dr. Rajesh Kumar';
    const spec = params.spec || 'Cardiologist';
 
-   const [messages, setMessages] = useState([
-      { id: '1', sender: 'system', text: 'This consultation is secure and end-to-end encrypted. Your medical summaries will be shared with the doctor only.', time: '02:58 PM' },
-      { id: '2', sender: 'doctor', text: `Hello Rahul, welcome. I have reviewed your profile and Vital Info summary. How can I help you today?`, time: '03:00 PM' },
-      { id: '3', sender: 'patient', text: 'Hello Doctor, I have been feeling a mild chest tightness and slight shortness of breath since yesterday morning after my run.', time: '03:01 PM' },
-      { id: '4', sender: 'doctor', text: 'Got it. Is the chest tightness continuous, or does it come and go? Also, do you feel any pain radiating to your left arm, shoulder, or jaw?', time: '03:02 PM' },
-      { id: '5', sender: 'patient', text: 'It comes and goes, mostly during deep breathing. No radiating pain to the arms or jaw.', time: '03:03 PM' },
-   ]);
+   const [messages, setMessages] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState('');
    const [inputText, setInputText] = useState('');
+   const [currentUser, setCurrentUser] = useState(null);
    const scrollViewRef = useRef();
+   const unsubRef = useRef(null);
 
-   // Auto scroll to bottom when new messages arrive
    useEffect(() => {
-      setTimeout(() => {
-         if (scrollViewRef.current) {
-            scrollViewRef.current.scrollToEnd({ animated: true });
+      if (!appointmentId) {
+         setError('Missing appointmentId — cannot open chat.');
+         setLoading(false);
+         return;
+      }
+
+      let isMounted = true;
+      (async () => {
+         try {
+            const profile = await getMyPatientProfile(); // { _id, name, ... }
+            const fbUser = await ensureFirebaseSignedIn('patient');
+            if (!isMounted) return;
+            // fbUser.uid IS profile._id — the backend mints the Firebase
+            // token using that same Mongo _id as the uid, so they always match.
+            setCurrentUser({ uid: fbUser.uid, name: profile.name });
+
+            await ensureChatDoc({
+               appointmentId,
+               patientId: fbUser.uid,
+               doctorId: doctorId || null,
+               patientName: profile.name,
+               doctorName: docName,
+            });
+
+            unsubRef.current = subscribeToMessages(appointmentId, (msgs) => {
+               if (!isMounted) return;
+               setMessages(msgs);
+               setLoading(false);
+               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 50);
+            });
+         } catch (err) {
+            console.warn('Chat init failed:', err.message);
+            if (isMounted) {
+               setError('Could not connect to chat. Please check your connection.');
+               setLoading(false);
+            }
          }
-      }, 100);
-   }, [messages]);
+      })();
 
-   const handleSend = () => {
-      if (!inputText.trim()) return;
-
-      const newMsg = {
-         id: String(messages.length + 1),
-         sender: 'patient',
-         text: inputText.trim(),
-         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      return () => {
+         isMounted = false;
+         if (unsubRef.current) unsubRef.current();
       };
+   }, [appointmentId]);
 
-      setMessages(prev => [...prev, newMsg]);
+   const handleSend = async () => {
+      const text = inputText.trim();
+      if (!text || !currentUser) return;
       setInputText('');
-
-      // Simulate a mock doctor auto-reply after 2 seconds
-      setTimeout(() => {
-         const doctorReply = {
-            id: String(messages.length + 2),
-            sender: 'doctor',
-            text: 'I understand. I recommend avoiding heavy exercises today. I will write a prescription for a mild anti-anginal medicine and request an ECG just to be safe.',
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-         };
-         setMessages(prev => [...prev, doctorReply]);
-      }, 2000);
+      try {
+         await sendMessage({ appointmentId, senderId: currentUser.uid, senderRole: 'patient', text });
+      } catch (err) {
+         Alert.alert('Error', 'Message could not be sent. Please try again.');
+      }
    };
 
    const handleAttach = () => {
-      Alert.alert(
-         'Share Document',
-         'Choose a document type to share with your doctor',
-         [
-            { 
-               text: 'Medical Report', 
-               onPress: () => {
-                  const attachMsg = {
-                     id: String(messages.length + 1),
-                     sender: 'patient',
-                     text: '📎 Shared Document: Latest_Blood_Report.pdf (1.2 MB)',
-                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  };
-                  setMessages(prev => [...prev, attachMsg]);
-               } 
-            },
-            { 
-               text: 'Prescription Photo', 
-               onPress: () => {
-                  const attachMsg = {
-                     id: String(messages.length + 1),
-                     sender: 'patient',
-                     text: '📸 Shared Image: Previous_Prescription.jpg (540 KB)',
-                     time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  };
-                  setMessages(prev => [...prev, attachMsg]);
-               } 
-            },
-            { text: 'Cancel', style: 'cancel' }
-         ]
-      );
+      Alert.alert('Attach', 'File/image sharing can be added as a follow-up — needs Firebase Storage rather than Firestore.');
    };
+
+   if (error) {
+      return (
+         <SafeAreaView style={[styles.safe, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+            <Ionicons name="cloud-offline-outline" size={40} color="#ccc" />
+            <Text style={{ marginTop: 12, color: '#888', textAlign: 'center' }}>{error}</Text>
+            <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+               <Text style={{ color: TEAL, fontWeight: '700' }}>Go back</Text>
+            </TouchableOpacity>
+         </SafeAreaView>
+      );
+   }
 
    return (
       <SafeAreaView style={styles.safe}>
          <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-         
-         {/* Custom Chat Header */}
+
          <View style={styles.topBar}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
             </TouchableOpacity>
-            
             <View style={styles.docInfo}>
                <View style={styles.avatar}>
                   <Text style={styles.avatarTxt}>Dr</Text>
@@ -119,87 +134,49 @@ export default function ConsultationChatScreen() {
                </View>
                <View style={{ marginLeft: 10 }}>
                   <Text style={styles.docName}>{docName}</Text>
-                  <Text style={styles.docSpec}>{spec} · Online</Text>
+                  <Text style={styles.docSpec}>{spec}</Text>
                </View>
             </View>
-
-            {/* Quick Consultation Actions */}
             <View style={styles.actionRow}>
-               <TouchableOpacity 
-                  style={styles.iconBtn}
-                  onPress={() => router.push('/patient/consultation-call')}
-               >
+               <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/patient/consultation-call')}>
                   <Ionicons name="videocam" size={22} color={TEAL} />
                </TouchableOpacity>
-               <TouchableOpacity 
-                  style={styles.iconBtn}
-                  onPress={() => router.push('/patient/consultation-call')}
-               >
+               <TouchableOpacity style={styles.iconBtn} onPress={() => router.push('/patient/consultation-call')}>
                   <Ionicons name="call" size={20} color={TEAL} />
                </TouchableOpacity>
             </View>
          </View>
 
-         {/* Chat Message List */}
-         <KeyboardAvoidingView 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
-            style={{ flex: 1 }}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
-         >
-            <ScrollView 
-               ref={scrollViewRef}
-               contentContainerStyle={styles.scroll} 
-               showsVerticalScrollIndicator={false}
-            >
-               {messages.map((m) => {
-                  if (m.sender === 'system') {
+         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}>
+            {loading ? (
+               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="small" color={TEAL} />
+               </View>
+            ) : (
+               <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+                  <View style={styles.systemMsg}>
+                     <Ionicons name="lock-closed" size={12} color="#888" style={{ marginRight: 6 }} />
+                     <Text style={styles.systemMsgTxt}>This consultation is secure and end-to-end encrypted. Your medical summaries will be shared with the doctor only.</Text>
+                  </View>
+
+                  {messages.map((m) => {
+                     const isPatient = m.senderRole === 'patient';
                      return (
-                        <View key={m.id} style={styles.systemMsg}>
-                           <Ionicons name="lock-closed" size={12} color="#888" style={{ marginRight: 6 }} />
-                           <Text style={styles.systemMsgTxt}>{m.text}</Text>
+                        <View key={m.id} style={[styles.msgRow, isPatient ? styles.msgRowRight : styles.msgRowLeft]}>
+                           <View style={[styles.bubble, isPatient ? styles.bubbleRight : styles.bubbleLeft]}>
+                              <Text style={[styles.msgTxt, isPatient ? styles.msgTxtRight : styles.msgTxtLeft]}>{m.text}</Text>
+                              <Text style={[styles.msgTime, isPatient ? styles.msgTimeRight : styles.msgTimeLeft]}>{formatTime(m.createdAt)}</Text>
+                           </View>
                         </View>
                      );
-                  }
+                  })}
+               </ScrollView>
+            )}
 
-                  const isPatient = m.sender === 'patient';
-                  return (
-                     <View 
-                        key={m.id} 
-                        style={[
-                           styles.msgRow, 
-                           isPatient ? styles.msgRowRight : styles.msgRowLeft
-                        ]}
-                     >
-                        <View 
-                           style={[
-                              styles.bubble, 
-                              isPatient ? styles.bubbleRight : styles.bubbleLeft
-                           ]}
-                        >
-                           <Text style={[
-                              styles.msgTxt, 
-                              isPatient ? styles.msgTxtRight : styles.msgTxtLeft
-                           ]}>
-                              {m.text}
-                           </Text>
-                           <Text style={[
-                              styles.msgTime, 
-                              isPatient ? styles.msgTimeRight : styles.msgTimeLeft
-                           ]}>
-                              {m.time}
-                           </Text>
-                        </View>
-                     </View>
-                  );
-               })}
-            </ScrollView>
-
-            {/* Chat Input Bar */}
             <View style={styles.inputBar}>
                <TouchableOpacity style={styles.attachBtn} onPress={handleAttach}>
                   <Ionicons name="add-circle" size={26} color={TEAL} />
                </TouchableOpacity>
-               
                <TextInput
                   style={styles.input}
                   placeholder="Type a message..."
@@ -208,9 +185,8 @@ export default function ConsultationChatScreen() {
                   placeholderTextColor="#999"
                   onSubmitEditing={handleSend}
                />
-               
-               <TouchableOpacity 
-                  style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]} 
+               <TouchableOpacity
+                  style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
                   onPress={handleSend}
                   disabled={!inputText.trim()}
                >

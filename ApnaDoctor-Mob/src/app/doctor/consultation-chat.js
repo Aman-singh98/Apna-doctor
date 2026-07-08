@@ -1,7 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+   ActivityIndicator,
    Alert,
    FlatList,
    KeyboardAvoidingView,
@@ -14,16 +15,10 @@ import {
    View,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ensureFirebaseSignedIn, ensureChatDoc, subscribeToMessages, sendMessage } from '../../services/chatService';
+import { getMyProfile } from '../../services/profileService'; // GET /doctor/profile/me → { _id, name, ... }
 
 const TEAL = '#1A7E8A';
-
-const initialMessages = [
-   { id: '1', from: 'patient', text: 'Hello Doctor, I have been experiencing chest tightness since yesterday.', time: '10:02 AM' },
-   { id: '2', from: 'doctor', text: 'Hello Rahul, I\'m sorry to hear that. Can you describe the pain? Is it sharp, dull, or pressure-like?', time: '10:03 AM' },
-   { id: '3', from: 'patient', text: 'It feels like pressure, especially when I climb stairs. No pain at rest.', time: '10:04 AM' },
-   { id: '4', from: 'doctor', text: 'Okay. Any shortness of breath, sweating, or nausea along with it?', time: '10:05 AM' },
-   { id: '5', from: 'patient', text: 'Mild shortness of breath but no sweating.', time: '10:06 AM' },
-];
 
 const quickReplies = [
    'Can you describe your symptoms?',
@@ -33,27 +28,87 @@ const quickReplies = [
    'I\'ll write you a prescription now.',
 ];
 
+const formatTime = (ts) => {
+   if (!ts) return '';
+   const d = ts.toDate ? ts.toDate() : new Date(ts);
+   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+};
+
 export default function DoctorConsultationChatScreen() {
    const router = useRouter();
    const params = useLocalSearchParams();
-   const patientName = params.patientName || 'Rahul Sharma';
-   const diagnosis = params.diagnosis || 'Hypertension follow-up';
+
+   // appointmentId is required — it's the chat's document id. Make sure every
+   // screen that navigates here (appointments.js already does; dashboard.js
+   // currently does NOT — add appointmentId to its params too) passes it.
+   const { appointmentId, patientId, patientName = 'Patient', diagnosis = '' } = params;
+
    const patientInitials = patientName.split(' ').map(w => w[0]).join('').toUpperCase();
-
    const insets = useSafeAreaInsets();
-   const [messages, setMessages] = useState(initialMessages);
-   const [inputText, setInputText] = useState('');
-   const flatListRef = useRef(null);
 
-   const sendMessage = (text) => {
+   const [messages, setMessages] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState('');
+   const [inputText, setInputText] = useState('');
+   const [currentUser, setCurrentUser] = useState(null);
+   const flatListRef = useRef(null);
+   const unsubRef = useRef(null);
+
+   useEffect(() => {
+      if (!appointmentId) {
+         setError('Missing appointmentId — cannot open chat.');
+         setLoading(false);
+         return;
+      }
+
+      let isMounted = true;
+      (async () => {
+         try {
+            const profile = await getMyProfile(); // { _id, name, ... }
+            const fbUser = await ensureFirebaseSignedIn('doctor');
+            if (!isMounted) return;
+            // fbUser.uid IS profile._id — the backend mints the Firebase
+            // token using that same Mongo _id as the uid, so they always match.
+            setCurrentUser({ uid: fbUser.uid, name: profile.name });
+
+            await ensureChatDoc({
+               appointmentId,
+               patientId: patientId || null,
+               doctorId: fbUser.uid,
+               patientName,
+               doctorName: profile.name,
+            });
+
+            unsubRef.current = subscribeToMessages(appointmentId, (msgs) => {
+               if (!isMounted) return;
+               setMessages(msgs);
+               setLoading(false);
+               setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 50);
+            });
+         } catch (err) {
+            console.warn('Chat init failed:', err.message);
+            if (isMounted) {
+               setError('Could not connect to chat. Please check your connection.');
+               setLoading(false);
+            }
+         }
+      })();
+
+      return () => {
+         isMounted = false;
+         if (unsubRef.current) unsubRef.current();
+      };
+   }, [appointmentId]);
+
+   const doSend = async (text) => {
       const msg = text || inputText.trim();
-      if (!msg) return;
-      setMessages(prev => [
-         ...prev,
-         { id: Date.now().toString(), from: 'doctor', text: msg, time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) },
-      ]);
+      if (!msg || !currentUser) return;
       setInputText('');
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      try {
+         await sendMessage({ appointmentId, senderId: currentUser.uid, senderRole: 'doctor', text: msg });
+      } catch (err) {
+         Alert.alert('Error', 'Message could not be sent. Please try again.');
+      }
    };
 
    const handleEndChat = () => {
@@ -69,14 +124,14 @@ export default function DoctorConsultationChatScreen() {
                   'Consultation Ended',
                   'Write a prescription for this patient?',
                   [
-                      { text: 'Skip', onPress: () => router.replace('/doctor/dashboard') },
-                      {
-                         text: 'Write Rx',
-                         onPress: () => router.replace({
-                            pathname: '/doctor/prescription-write',
-                            params: { patientName, diagnosis }
-                         })
-                      },
+                     { text: 'Skip', onPress: () => router.replace('/doctor/dashboard') },
+                     {
+                        text: 'Write Rx',
+                        onPress: () => router.replace({
+                           pathname: '/doctor/prescription-write',
+                           params: { patientName, diagnosis }
+                        })
+                     },
                   ]
                ),
             },
@@ -85,7 +140,7 @@ export default function DoctorConsultationChatScreen() {
    };
 
    const renderMessage = ({ item }) => {
-      const isDoctor = item.from === 'doctor';
+      const isDoctor = item.senderRole === 'doctor';
       return (
          <View style={[styles.msgRow, isDoctor ? styles.msgRowDoctor : styles.msgRowPatient]}>
             {!isDoctor && (
@@ -95,17 +150,28 @@ export default function DoctorConsultationChatScreen() {
             )}
             <View style={[styles.bubble, isDoctor ? styles.bubbleDoctor : styles.bubblePatient]}>
                <Text style={[styles.bubbleTxt, isDoctor && styles.bubbleTxtDoctor]}>{item.text}</Text>
-               <Text style={[styles.bubbleTime, isDoctor && styles.bubbleTimeDoctor]}>{item.time}</Text>
+               <Text style={[styles.bubbleTime, isDoctor && styles.bubbleTimeDoctor]}>{formatTime(item.createdAt)}</Text>
             </View>
          </View>
       );
    };
 
+   if (error) {
+      return (
+         <SafeAreaView style={[styles.safe, { alignItems: 'center', justifyContent: 'center', padding: 24 }]}>
+            <Ionicons name="cloud-offline-outline" size={40} color="#ccc" />
+            <Text style={{ marginTop: 12, color: '#888', textAlign: 'center' }}>{error}</Text>
+            <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 16 }}>
+               <Text style={{ color: TEAL, fontWeight: '700' }}>Go back</Text>
+            </TouchableOpacity>
+         </SafeAreaView>
+      );
+   }
+
    return (
       <SafeAreaView style={styles.safe}>
          <StatusBar barStyle="dark-content" backgroundColor={TEAL} />
 
-         {/* Header */}
          <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
                <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -118,7 +184,7 @@ export default function DoctorConsultationChatScreen() {
                   <Text style={styles.headerName}>{patientName}</Text>
                   <View style={styles.onlineDotRow}>
                      <View style={styles.onlineDot} />
-                     <Text style={styles.onlineText}>Online · Chat Consultation</Text>
+                     <Text style={styles.onlineText}>Chat Consultation</Text>
                   </View>
                </View>
             </View>
@@ -127,39 +193,35 @@ export default function DoctorConsultationChatScreen() {
             </TouchableOpacity>
          </View>
 
-         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.chatContainer}
-            keyboardVerticalOffset={0}
-         >
-            {/* Patient Info Card */}
+         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.chatContainer} keyboardVerticalOffset={0}>
             <View style={styles.patientInfoCard}>
                <Ionicons name="medical-outline" size={14} color="#888" style={{ marginRight: 6 }} />
-               <Text style={styles.patientInfoTxt}>{diagnosis} · Age 28</Text>
+               <Text style={styles.patientInfoTxt}>{diagnosis || 'No diagnosis noted yet'}</Text>
                <TouchableOpacity
                   style={styles.rxMiniBtn}
-                  onPress={() => router.push({
-                     pathname: '/doctor/prescription-write',
-                     params: { patientName, diagnosis }
-                  })}
+                  onPress={() => router.push({ pathname: '/doctor/prescription-write', params: { patientName, diagnosis } })}
                >
                   <MaterialCommunityIcons name="prescription" size={13} color={TEAL} />
                   <Text style={styles.rxMiniTxt}>Rx</Text>
                </TouchableOpacity>
             </View>
 
-            {/* Messages */}
-            <FlatList
-               ref={flatListRef}
-               data={messages}
-               keyExtractor={item => item.id}
-               renderItem={renderMessage}
-               contentContainerStyle={styles.messagesList}
-               showsVerticalScrollIndicator={false}
-               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
-            />
+            {loading ? (
+               <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator size="small" color={TEAL} />
+               </View>
+            ) : (
+               <FlatList
+                  ref={flatListRef}
+                  data={messages}
+                  keyExtractor={item => item.id}
+                  renderItem={renderMessage}
+                  contentContainerStyle={styles.messagesList}
+                  showsVerticalScrollIndicator={false}
+                  onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+               />
+            )}
 
-            {/* Quick Replies */}
             <FlatList
                data={quickReplies}
                keyExtractor={item => item}
@@ -167,16 +229,12 @@ export default function DoctorConsultationChatScreen() {
                showsHorizontalScrollIndicator={false}
                contentContainerStyle={styles.quickRepliesList}
                renderItem={({ item }) => (
-                  <TouchableOpacity
-                     style={styles.quickReplyChip}
-                     onPress={() => sendMessage(item)}
-                  >
+                  <TouchableOpacity style={styles.quickReplyChip} onPress={() => doSend(item)}>
                      <Text style={styles.quickReplyTxt}>{item}</Text>
                   </TouchableOpacity>
                )}
             />
 
-            {/* Input Bar */}
             <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                <TouchableOpacity style={styles.attachBtn} onPress={() => Alert.alert('Attach', 'Attach lab reports or images to share with patient.')}>
                   <Ionicons name="attach" size={22} color="#888" />
@@ -191,7 +249,7 @@ export default function DoctorConsultationChatScreen() {
                />
                <TouchableOpacity
                   style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]}
-                  onPress={() => sendMessage()}
+                  onPress={() => doSend()}
                   disabled={!inputText.trim()}
                >
                   <Ionicons name="send" size={20} color="#fff" />
