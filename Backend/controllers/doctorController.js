@@ -7,13 +7,14 @@ const { anonymizeDoctor } = require('../jobs/accountDeletionJob');
 // approvalStatus, since a doctor can be mid-deletion while still 'approved'.
 const getAllDoctors = async (req, res, next) => {
 	try {
-		const { status, search, accountStatus, page = 1, limit = 10 } = req.query;
+		const { status, search, accountStatus, category, page = 1, limit = 10 } = req.query;
 
 		// Default view excludes 'not_started' — those doctors haven't submitted
 		// anything for review yet, so they shouldn't clutter the admin queue.
 		const filter = { approvalStatus: { $ne: 'not_started' } };
 		if (status) filter.approvalStatus = status;
 		if (accountStatus) filter.accountStatus = accountStatus;
+		if (category) filter.category = category; // 'gp' | 'specialist' | 'super_specialist'
 
 		if (search) {
 			filter.$or = [
@@ -65,6 +66,18 @@ const getDoctorStats = async (req, res, next) => {
 		]);
 		result.pendingDeletion = pendingDeletion;
 		result.deleted = deleted;
+
+		// Category breakdown — e.g. { gp: 12, specialist: 8, super_specialist: 3 }
+		// Only counts doctors who've actually submitted (excludes not_started),
+		// mirroring the same base filter as the status breakdown above.
+		const categoryStats = await Doctor.aggregate([
+			{ $match: { approvalStatus: { $ne: 'not_started' }, category: { $ne: null } } },
+			{ $group: { _id: '$category', count: { $sum: 1 } } },
+		]);
+		result.byCategory = categoryStats.reduce((acc, { _id, count }) => {
+			acc[_id] = count;
+			return acc;
+		}, {});
 
 		res.status(200).json({ success: true, stats: result });
 	} catch (err) {

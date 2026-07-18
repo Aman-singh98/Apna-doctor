@@ -20,6 +20,7 @@ import DoctorBottomNav from '../../components/DoctorBottomNav';
 import ReviewAccordionItem from '../../components/ReviewAccordionItem';
 import { getMyProfile } from '../../services/profileService';
 import { getMyReviews } from '../../services/doctorReviewService';
+import { getFeesForCategory, getCategoryLabel } from '../../constants/doctorFees';
 
 const TEAL = '#1A7E8A';
 
@@ -131,6 +132,11 @@ export default function DoctorProfileScreen() {
       .join('')
       .toUpperCase();
 
+   // Fees are fixed by category, not stored per-doctor — always derive
+   // them fresh so the display can never drift from the current price list.
+   const fees = getFeesForCategory(doctor?.category);
+   const categoryLabel = getCategoryLabel(doctor?.category);
+
    return (
       <SafeAreaView style={styles.safe}>
          <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -154,6 +160,11 @@ export default function DoctorProfileScreen() {
                   <Text style={styles.spec}>
                      {[doctor?.specialization, doctor?.qualification].filter(Boolean).join(' · ')}
                   </Text>
+                  {!!categoryLabel && (
+                     <View style={styles.categoryBadge}>
+                        <Text style={styles.categoryBadgeTxt}>{categoryLabel}</Text>
+                     </View>
+                  )}
                   <Text style={styles.hospital}>{doctor?.hospital}</Text>
 
                   <View style={styles.statsRow}>
@@ -169,21 +180,28 @@ export default function DoctorProfileScreen() {
                   </View>
                </View>
 
-               {/* Fees Card */}
+               {/* Fees Card — fixed by category, shown read-only */}
                <View style={styles.feesCard}>
                   <View style={styles.feesRow}>
                      <View style={styles.feesIconBg}>
                         <Ionicons name="videocam-outline" size={18} color={TEAL} />
                      </View>
                      <Text style={styles.feesLabel}>Video Consultation</Text>
-                     <Text style={styles.feesValue}>₹{doctor?.videoFee ?? 0}</Text>
+                     <Text style={styles.feesValue}>₹{fees.video}</Text>
+                  </View>
+                  <View style={[styles.feesRow, { borderTopWidth: 1, borderTopColor: '#f5f5f5', marginTop: 8, paddingTop: 8 }]}>
+                     <View style={styles.feesIconBg}>
+                        <Ionicons name="call-outline" size={18} color={TEAL} />
+                     </View>
+                     <Text style={styles.feesLabel}>Audio Consultation</Text>
+                     <Text style={styles.feesValue}>₹{fees.audio}</Text>
                   </View>
                   <View style={[styles.feesRow, { borderTopWidth: 1, borderTopColor: '#f5f5f5', marginTop: 8, paddingTop: 8 }]}>
                      <View style={styles.feesIconBg}>
                         <Ionicons name="chatbubbles-outline" size={18} color={TEAL} />
                      </View>
                      <Text style={styles.feesLabel}>Chat Consultation</Text>
-                     <Text style={styles.feesValue}>₹{doctor?.chatFee ?? 0}</Text>
+                     <Text style={styles.feesValue}>₹{fees.chat}</Text>
                   </View>
                </View>
 
@@ -286,6 +304,8 @@ const styles = StyleSheet.create({
    verifiedBadge: { position: 'absolute', bottom: 4, right: 4, width: 20, height: 20, borderRadius: 10, backgroundColor: '#1D9E75', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
    name: { fontSize: 22, fontWeight: '700', color: '#1a1a1a', marginTop: 14 },
    spec: { fontSize: 14, color: TEAL, fontWeight: '600', marginTop: 4 },
+   categoryBadge: { backgroundColor: '#E8F5F7', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, marginTop: 6 },
+   categoryBadgeTxt: { fontSize: 11, color: TEAL, fontWeight: '700' },
    hospital: { fontSize: 13, color: '#888', marginTop: 4 },
    statsRow: { flexDirection: 'row', gap: 24, marginTop: 20, paddingHorizontal: 20 },
    statItem: { alignItems: 'center' },

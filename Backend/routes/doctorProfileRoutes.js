@@ -7,8 +7,15 @@
 //
 // GET    /api/doctors/me                  → full profile (profile.js)
 // PATCH  /api/doctors/me                  → update profile (profile-edit.js)
-//        body: { name, qualification, experience, hospital, videoFee, chatFee, bio, specialization }
+//        body: { name, qualification, experience, hospital, category, specialization, bio }
+//        NOTE: videoFee/audioFee/chatFee are NOT accepted here — they're
+//        derived automatically from `category` (see config/doctorFeeConfig.js
+//        and the pre('save') hook in models/Doctor.js).
 // POST   /api/doctors/me/photo            → upload/replace profile photo (multipart/form-data)
+// POST   /api/doctors/me/signature        → upload/replace signature (multipart/form-data)
+//        accepts either a gallery-picked image or a drawn signature exported
+//        as PNG from the on-screen signature pad — both arrive as a plain
+//        file upload, field name "signature"
 //
 // GET    /api/doctors/me/dashboard        → dashboard stats (dashboard.js)
 //        → { todayPatients, monthCount, todayEarnings, rating }
@@ -24,6 +31,7 @@ const {
   getMyProfile,
   updateMyProfile,
   uploadMyPhoto,
+  uploadMySignature,
   getMyDashboard,
   setMyAvailability,
   getMyReviews,
@@ -40,14 +48,15 @@ const router = express.Router();
 router.use(doctorProtect);
 
 // ── Profile ────────────────────────────────────────────────────────────────────
-router.get  ('/me',        getMyProfile);
-router.patch('/me',        updateMyProfile);
-router.post ('/me/photo',  upload.single('photo'), uploadMyPhoto);
+router.get('/me', getMyProfile);
+router.patch('/me', updateMyProfile);
+router.post('/me/photo', upload.single('photo'), uploadMyPhoto);
+router.post('/me/signature', upload.single('signature'), uploadMySignature);
 
 // ── Dashboard ──────────────────────────────────────────────────────────────────
-router.get  ('/me/dashboard',     getMyDashboard);
-router.patch('/me/availability',  setMyAvailability);
-router.get  ('/me/reviews',       getMyReviews);
+router.get('/me/dashboard', getMyDashboard);
+router.patch('/me/availability', setMyAvailability);
+router.get('/me/reviews', getMyReviews);
 
 // ── Schedule ───────────────────────────────────────────────────────────────────
 router.get('/me/schedule', getMySchedule);

@@ -1,27 +1,13 @@
 // ─── Doctor Self-Profile Controller (Doctor-facing) ───────────────────────────
 // Used by routes/doctorProfileRoutes.js
 // Every function here acts on req.user.id ONLY — never another doctor's record.
-//
-// ASSUMPTIONS — adjust to match your real Mongoose schema:
-//   - Model name: 'Doctor'  (same model your ADMIN doctorController.js already
-//     uses — this file just queries/updates the logged-in doctor's own document
-//     instead of an arbitrary :id)
-//   - Fields assumed, based on profile.js / profile-edit.js / dashboard.js / schedule.js:
-//       name, qualification, experience, hospital, specialization,
-//       videoFee, chatFee, bio, photoUrl,
-//       available (Boolean),
-//       schedule: { activeDays: [String], activeSlots: [String],
-//                   videoEnabled, audioEnabled, chatEnabled, maxPatients }
-//   - Dashboard stats (todayPatients, monthCount, todayEarnings, rating) are
-//     mostly DERIVED from Appointment/Transaction collections, not stored
-//     directly on Doctor — see getMyDashboard below.
-//   - Reviews assumed to live in a separate 'Review' model, ref'd to doctor.
 
 const Doctor = require('../models/Doctor'); // adjust path/name if different
 const Appointment = require('../models/Appointment');
 const Transaction = require('../models/Transaction');
 const Review = require('../models/Review');
 const cloudinaryService = require('../services/cloudinaryService');
+const { DOCTOR_CATEGORY_KEYS } = require('../config/doctorFeeConfig');
 
 // GET /api/doctors/me
 exports.getMyProfile = async (req, res) => {
@@ -37,7 +23,12 @@ exports.getMyProfile = async (req, res) => {
 };
 
 // PATCH /api/doctors/me
-// body: { name, qualification, experience, hospital, videoFee, chatFee, bio, specialization }
+// body: { name, qualification, experience, hospital, category, specialization, bio }
+//
+// NOTE: videoFee / audioFee / chatFee are intentionally NOT accepted here.
+// They're derived automatically from `category` — see the pre('save') hook
+// in models/Doctor.js and config/doctorFeeConfig.js. If a body includes
+// them, they're silently ignored (not in allowedFields below).
 exports.updateMyProfile = async (req, res) => {
    try {
       const allowedFields = [
@@ -45,10 +36,9 @@ exports.updateMyProfile = async (req, res) => {
          'qualification',
          'experience',
          'hospital',
-         'videoFee',
-         'chatFee',
-         'bio',
+         'category',
          'specialization',
+         'bio',
       ];
 
       const updates = {};
@@ -62,15 +52,23 @@ exports.updateMyProfile = async (req, res) => {
          return res.status(400).json({ message: 'No valid fields provided to update' });
       }
 
-      const doctor = await Doctor.findByIdAndUpdate(
-         req.user.id,
-         updates,
-         { new: true, runValidators: true }
-      ).select('-password');
+      if (updates.category && !DOCTOR_CATEGORY_KEYS.includes(updates.category)) {
+         return res.status(400).json({
+            message: `category must be one of: ${DOCTOR_CATEGORY_KEYS.join(', ')}`,
+         });
+      }
 
+      // Fetch + save (NOT findByIdAndUpdate) — this is required so the
+      // pre('save') hook that re-derives videoFee/audioFee/chatFee from
+      // category actually runs. findByIdAndUpdate bypasses document
+      // middleware by default and would leave stale fee values in place.
+      const doctor = await Doctor.findById(req.user.id).select('-password');
       if (!doctor) {
          return res.status(404).json({ message: 'Doctor not found' });
       }
+
+      Object.assign(doctor, updates);
+      await doctor.save();
 
       res.json(doctor);
    } catch (err) {
@@ -122,6 +120,52 @@ exports.uploadMyPhoto = async (req, res) => {
       res.json(updated);
    } catch (err) {
       res.status(500).json({ message: 'Failed to upload photo', error: err.message });
+   }
+};
+
+// POST /api/doctors/me/signature  (multipart/form-data, field name: "signature")
+//
+// Accepts EITHER a gallery-picked image OR a PNG exported from the
+// on-screen signature pad (frontend converts the pad's base64 output to a
+// file before calling this same endpoint — see utils/imageUtils.js /
+// dataUrlToFileUri on the mobile app). Server-side there's no difference
+// between the two — both arrive as a regular image file upload.
+exports.uploadMySignature = async (req, res) => {
+   try {
+      if (!req.file) {
+         return res.status(400).json({ message: 'No signature file received' });
+      }
+
+      const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!allowed.includes(req.file.mimetype)) {
+         return res.status(400).json({ message: 'Only JPEG, PNG, or WebP images are allowed for signatures' });
+      }
+
+      const doctor = await Doctor.findById(req.user.id).select('signaturePublicId');
+      if (!doctor) {
+         return res.status(404).json({ message: 'Doctor not found' });
+      }
+
+      const { url, publicId } = await cloudinaryService.uploadBuffer(req.file.buffer, {
+         public_id: `doctor_signature_${req.user.id}`,
+         overwrite: true,
+      });
+
+      const oldPublicId = doctor.signaturePublicId;
+
+      const updated = await Doctor.findByIdAndUpdate(
+         req.user.id,
+         { signatureUrl: url, signaturePublicId: publicId },
+         { new: true }
+      ).select('-password');
+
+      if (oldPublicId && oldPublicId !== publicId) {
+         await cloudinaryService.deleteByPublicId(oldPublicId);
+      }
+
+      res.json(updated);
+   } catch (err) {
+      res.status(500).json({ message: 'Failed to upload signature', error: err.message });
    }
 };
 

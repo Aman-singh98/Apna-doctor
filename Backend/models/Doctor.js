@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { DOCTOR_CATEGORY_KEYS, getFeesForCategory } = require('../config/doctorFeeConfig');
 
 const doctorSchema = new mongoose.Schema(
 	{
@@ -20,8 +21,27 @@ const doctorSchema = new mongoose.Schema(
 		photoUrl: { type: String },
 		photoPublicId: { type: String },
 
-		// ── Consultation fees (set by doctor after approval) ───────────────────
+		// ── Signature (shown on prescriptions) ─────────────────────────────────
+		signatureUrl: { type: String },
+		signaturePublicId: { type: String },
+
+		// ── Doctor category — decides consultation fees + revenue split ────────
+		// Chosen once at signup (see doctor-signup.js on the frontend); can be
+		// changed later from profile-edit.js. Whenever this changes, the
+		// pre('save') hook below re-derives videoFee/audioFee/chatFee from
+		// config/doctorFeeConfig.js — those fee fields should never be set
+		// directly by a doctor or admin request.
+		category: {
+			type: String,
+			enum: DOCTOR_CATEGORY_KEYS, // ['gp', 'specialist', 'super_specialist']
+		},
+
+		// ── Consultation fees — AUTO-DERIVED from `category`, read-only from
+		// the doctor's perspective. Cached on the document (rather than only
+		// computed on the fly) so any existing queries/aggregations that sort,
+		// filter, or display doctor.videoFee etc. keep working unchanged.
 		videoFee: { type: Number, default: 0 },
+		audioFee: { type: Number, default: 0 },
 		chatFee: { type: Number, default: 0 },
 
 		// ── Live app state ───────────────────────────────────────────────────
@@ -99,5 +119,19 @@ const doctorSchema = new mongoose.Schema(
 	},
 	{ timestamps: true }
 );
+
+// Auto-fill fees from category whenever category is set/changed.
+// NOTE: this only fires on .save() — findByIdAndUpdate()/updateOne() skip
+// document middleware by default. Controllers that change `category` must
+// fetch the document and call .save() rather than findByIdAndUpdate.
+doctorSchema.pre('save', function (next) {
+	if (this.isModified('category') && this.category) {
+		const fees = getFeesForCategory(this.category);
+		this.videoFee = fees.video;
+		this.audioFee = fees.audio;
+		this.chatFee = fees.chat;
+	}
+	next();
+});
 
 module.exports = mongoose.model('Doctor', doctorSchema);
