@@ -1,0 +1,34 @@
+# ── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Env files (secrets: DB URIs, JWT secrets, Razorpay keys, etc.) ────────────
+.env
+.env.local
+.env.*.local
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+*.log
+
+# ── Uploads / generated files ──────────────────────────────────────────────
+uploads/
+tmp/
+
+# ── Test / coverage output ──────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Editor / OS ──────────────────────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+
+# ── Credentials that shouldn't ever be committed ────────────────────────────
+*.pem
+*.key
+serviceAccountKey.json
