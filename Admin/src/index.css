@@ -1,0 +1,111 @@
+/* ─── Global Styles ─────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Design Tokens ──────────────────────────────────────────────────────────── */
+:root {
+	--blue-primary: #1A73E8;
+	--blue-dark: #1557B0;
+	--blue-tint: #E8F0FE;
+	--blue-soft: #F0F4FF;
+
+	--navy-heading: #1C2B4A;
+	--text-body: #3C4858;
+	--text-muted: #5F6B7C;
+	--text-placeholder: #9AA5B4;
+
+	--bg-page: #F4F6FB;
+	--bg-card: #FFFFFF;
+	--bg-sidebar: #FFFFFF;
+
+	--border-default: #E4E9F0;
+	--border-focus: #1A73E8;
+
+	--green-success: #34A853;
+	--red-danger: #EA4335;
+	--amber-warn: #FBBC04;
+	--purple-accent: #9C27B0;
+
+	--shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+	--shadow-elevated: 0 4px 16px rgba(26, 115, 232, 0.10), 0 1px 4px rgba(0, 0, 0, 0.06);
+
+	--radius-sm: 6px;
+	--radius-md: 10px;
+	--radius-lg: 14px;
+
+	--sidebar-width: 240px;
+	--header-height: 60px;
+
+	--font-base: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+/* ─── Base Reset ─────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	font-family: var(--font-base);
+	background-color: var(--bg-page);
+	color: var(--text-body);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+	width: 5px;
+	height: 5px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background: #CBD2DC;
+	border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: #A0ABBE;
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid var(--blue-primary);
+	outline-offset: 2px;
+}
+
+/* ─── Utilities ──────────────────────────────────────────────────────────────── */
+.text-primary {
+	color: var(--blue-primary);
+}
+
+.text-heading {
+	color: var(--navy-heading);
+}
+
+.text-muted {
+	color: var(--text-muted);
+}
+
+.bg-tint {
+	background: var(--blue-tint);
+}
+
+.card {
+	background: var(--bg-card);
+	border-radius: var(--radius-md);
+	box-shadow: var(--shadow-card);
+	border: 1px solid var(--border-default);
+}

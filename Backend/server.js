@@ -1,0 +1,366 @@
+// Entry point for Apna Doctor backend.
+// Boot order: env → DB → Firebase → Express routes
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const connectDB = require('./config/db');
+
+// Fail fast at boot if serviceAccountKey.json is missing / malformed
+require('./config/firebaseAdmin');
+
+// ── Route files ───────────────────────────────────────────────────────────────
+const authRoutes = require('./routes/authRoutes');
+const doctorRoutes = require('./routes/doctorRoutes');
+
+// Doctor onboarding/auth routes (OTP, terms, signup, status)
+const doctorAuthRoutes = require('./routes/doctorAuth');
+const doctorMeRoutes = require('./routes/doctorMe');
+
+// Doctor self-service routes (profile, dashboard, availability, schedule)
+const doctorProfileRoutes = require('./routes/doctorProfileRoutes');
+
+// Admin approval routes (no auth middleware yet — see routes/admin.js)
+const adminRoutes = require('./routes/admin');
+
+// Admin patient management routes (no auth middleware yet — see routes/adminPatientRoutes.js)
+const adminPatientRoutes = require('./routes/patient/adminPatientRoutes');
+
+// Admin appointment management routes (no auth middleware yet — see routes/adminAppointmentRoutes.js)
+const adminAppointmentRoutes = require('./routes/adminAppointmentRoutes');
+
+// Admin payment management routes (no auth middleware yet — see routes/adminPaymentRoutes.js)
+const adminPaymentRoutes = require('./routes/adminPaymentRoutes');
+
+// Admin dashboard overview route (no auth middleware yet — see routes/adminDashboardRoutes.js)
+const adminDashboardRoutes = require('./routes/adminDashboardRoutes');
+
+// Doctor-facing prescription routes (create/list/update/delete, scoped to doctor)
+const prescriptionRoutes = require('./routes/prescriptionRoutes');
+
+// Patient-facing prescription routes — read-only view of prescriptions a
+// doctor has issued to the logged-in patient. Distinct from
+// prescriptionRoutes above (doctor-facing, full CRUD).
+const patientPrescriptionRoutes = require('./routes/patientPrescriptionRoutes');
+
+// Doctor-facing appointment routes (list/today/detail/complete/cancel, scoped to doctor)
+const appointmentRoutes = require('./routes/appointmentRoutes');
+
+// Doctor-facing support ticket routes (create/list/view own tickets, reply)
+const doctorTicketRoutes = require('./routes/doctorTicketRoutes');
+
+// Patient onboarding/auth routes (OTP, terms, signup) — a patient's own login,
+// parallel to doctorAuthRoutes / doctorMeRoutes.
+const patientAuthRoutes = require('./routes/patient/patientAuth');
+const patientMeRoutes = require('./routes/patient/patientMe');
+
+// Doctor-facing patient routes — lets a doctor list/view patients they've
+// consulted with. Distinct from patientAuthRoutes/patientMeRoutes above.
+const patientRoutes = require('./routes/patientRoutes');
+
+// Patient family members & emergency contacts routes
+const familyMembersRoutes = require('./routes/familyMembers');
+const emergencyContactsRoutes = require('./routes/emergencyContacts');
+
+// Patient-facing appointment routes — list/cancel/reschedule the patient's
+// own appointments. Distinct from appointmentRoutes (doctor-facing).
+const patientAppointmentRoutes = require('./routes/patientAppointmentRoutes');
+
+// Patient-facing doctor browse routes — search/list approved doctors and
+// check slot availability. Distinct from doctorRoutes (admin-only).
+const patientDoctorRoutes = require('./routes/patient/patientDoctorRoutes');
+
+// Patient-facing support ticket routes (create/list/view own tickets)
+const ticketRoutes = require('./routes/ticketRoutes');
+
+// Admin support ticket management routes (list all, update status, reply)
+const adminTicketRoutes = require('./routes/adminTicketRoutes');
+
+// Admin-facing notification routes — list/mark-read/clear/device-token,
+// scoped by the admin auth middleware. Needed now that
+// adminTicketController.js broadcasts to admins via notifyAllAdmins().
+const adminNotificationRoutes = require('./routes/adminNotificationRoutes');
+const patientRecordsRoutes = require('./routes/patient/records');
+const patientMedicalHistoryRoutes = require('./routes/patient/medicalHistory');
+
+// Self-service "Delete Account Permanently" routes (Settings > Danger Zone),
+// for both patient and doctor. See routes/accountDeletionRoutes.js for the
+// soft-delete + grace-period design.
+const accountDeletionRoutes = require('./routes/accountDeletionRoutes');
+const { startAccountDeletionJob } = require('./jobs/accountDeletionJob');
+const { startTransferHoldMonitorJob } = require('./jobs/transferHoldMonitorJob');
+
+// Patient-facing review routes — rate & review a doctor after a completed
+// appointment; also serves a doctor's aggregate rating for doctor-detail.js
+const reviewRoutes = require('./routes/reviewRoutes');
+
+// Doctor-facing review routes — lets a doctor see their own reviews +
+// aggregate rating (profile.js "Patient Reviews" section, dashboard.js stat)
+const doctorReviewRoutes = require('./routes/doctorReviewRoutes');
+
+// Patient-facing notification routes — list/mark-read/clear/device-token,
+// scoped by patientProtect. Distinct from doctorNotificationRoutes below.
+const patientNotificationRoutes = require('./routes/patientNotifications');
+
+// Doctor-facing notification routes — same shape as patient's, scoped by
+// doctorProtect (so also requires approved status, like the other doctor routes).
+const doctorNotificationRoutes = require('./routes/doctorNotifications');
+
+const consultationRoutes = require('./routes/consultationRoutes');
+const patientConsultationRoutes = require('./routes/patientConsultationRoutes');
+
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const chatTokenRoutes = require('./routes/chatTokenRoutes');
+
+// Razorpay webhooks (Phase 3 task 20: account.* KYC events; Phase 4 will add
+// payment.*/transfer.* here too) — see the express.raw() note just below.
+const webhookRoutes = require('./routes/webhookRoutes');
+
+// ── Connect to MongoDB ────────────────────────────────────────────────────────
+connectDB();
+
+const app = express();
+
+// ── Global Middleware ─────────────────────────────────────────────────────────
+app.use(cors());
+
+// Razorpay webhook signature verification needs the EXACT raw request
+// bytes Razorpay signed. It must be mounted here, before the global
+// express.json() below — once express.json() (or urlencoded) consumes the
+// request stream for a path, the raw bytes are gone and can't be
+// re-read/re-verified. Scoped to this one path only; every other route
+// keeps using the normal parsed-JSON body below.
+app.use('/api/webhooks', express.raw({ type: '*/*' }), webhookRoutes);
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // extended: true needed for multipart form fallback
+
+// ── Health Check ──────────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) =>
+	res.status(200).json({ success: true, message: 'Apna Doctor API is running.' })
+);
+
+// ── Existing Routes ───────────────────────────────────────────────────────────
+app.use('/api/auth', authRoutes);
+app.use('/api/doctors', doctorRoutes);
+
+// ── Doctor Onboarding Routes ──────────────────────────────────────────────────
+// POST /api/doctor/auth/send-otp
+// POST /api/doctor/auth/verify-otp
+app.use('/api/doctor/auth', doctorAuthRoutes);
+
+// GET  /api/doctor/me/status        (requires JWT)
+// POST /api/doctor/me/accept-terms  (requires JWT)
+// POST /api/doctor/me/signup        (requires JWT, multipart/form-data)
+app.use('/api/doctor/me', doctorMeRoutes);
+
+// ── Doctor Self-Profile Routes ────────────────────────────────────────────────
+// GET    /api/doctor/profile/me
+// PATCH  /api/doctor/profile/me
+// POST   /api/doctor/profile/me/photo
+// GET    /api/doctor/profile/me/dashboard
+// PATCH  /api/doctor/profile/me/availability
+// GET    /api/doctor/profile/me/reviews
+// GET/PUT /api/doctor/profile/me/schedule
+app.use('/api/doctor/profile', doctorProfileRoutes);
+
+// ── Admin Approval Routes ─────────────────────────────────────────────────────
+// GET  /api/admin/doctors?status=pending
+// POST /api/admin/doctors/:doctorId/approve
+// POST /api/admin/doctors/:doctorId/reject
+app.use('/api/admin/doctors', adminRoutes);
+
+// ── Admin Patient Management Routes ───────────────────────────────────────────
+// GET   /api/admin/patients?search=&status=&page=&limit=
+// GET   /api/admin/patients/stats
+// GET   /api/admin/patients/:id
+// PATCH /api/admin/patients/:id/suspend
+// PATCH /api/admin/patients/:id/unsuspend
+app.use('/api/admin/patients', adminPatientRoutes);
+
+// ── Admin Appointment Management Routes ───────────────────────────────────────
+// GET   /api/admin/appointments?status=&search=&page=&limit=
+// GET   /api/admin/appointments/stats
+// GET   /api/admin/appointments/:id
+// PATCH /api/admin/appointments/:id/cancel
+app.use('/api/admin/appointments', adminAppointmentRoutes);
+
+// ── Admin Payment Management Routes ───────────────────────────────────────────
+// GET   /api/admin/payments?status=&search=&page=&limit=
+// GET   /api/admin/payments/stats
+// GET   /api/admin/payments/:id
+// PATCH /api/admin/payments/:id/refund
+app.use('/api/admin/payments', adminPaymentRoutes);
+
+// GET   /api/admin/dashboard  → stat cards, revenue trend, quick stats, recent appointments
+app.use('/api/admin/dashboard', adminDashboardRoutes);
+
+// ── Doctor Prescription Routes ────────────────────────────────────────────────
+// GET    /api/prescriptions
+// GET    /api/prescriptions/:id
+// POST   /api/prescriptions
+// PUT    /api/prescriptions/:id
+// DELETE /api/prescriptions/:id
+app.use('/api/prescriptions', prescriptionRoutes);
+
+// ── Patient Prescription Routes ───────────────────────────────────────────────
+// GET /api/patient/prescriptions       (requires patient JWT) — list my Rx's
+// GET /api/patient/prescriptions/:id   (requires patient JWT) — single Rx detail
+app.use('/api/patient/prescriptions', patientPrescriptionRoutes);
+
+// ── Doctor Appointment Routes ─────────────────────────────────────────────────
+// GET    /api/appointments               (requires doctor JWT + approved status)
+// GET    /api/appointments/today         (requires doctor JWT + approved status)
+// GET    /api/appointments/:id           (requires doctor JWT + approved status)
+// PATCH  /api/appointments/:id/complete  (requires doctor JWT + approved status)
+// PATCH  /api/appointments/:id/cancel    (requires doctor JWT + approved status)
+app.use('/api/appointments', appointmentRoutes);
+
+// ── Doctor Support Ticket Routes ──────────────────────────────────────────────
+// POST /api/doctor/tickets              (requires doctor JWT)
+// GET  /api/doctor/tickets              (requires doctor JWT)
+// GET  /api/doctor/tickets/:id          (requires doctor JWT)
+// POST /api/doctor/tickets/:id/replies  (requires doctor JWT)
+app.use('/api/doctor/tickets', doctorTicketRoutes);
+
+// ── Patient Onboarding Routes ─────────────────────────────────────────────────
+// POST /api/patient/auth/send-otp
+// POST /api/patient/auth/verify-otp
+app.use('/api/patient/auth', patientAuthRoutes);
+
+// POST /api/patient/me/accept-terms  (requires patient JWT)
+// POST /api/patient/me/signup        (requires patient JWT)
+app.use('/api/patient/me', patientMeRoutes);
+
+// ── Doctor-Facing Patient Routes ──────────────────────────────────────────────
+// GET  /api/patients?search=       (requires doctor JWT)
+// GET  /api/patients/:id           (requires doctor JWT)
+app.use('/api/patients', patientRoutes);
+
+// GET/POST/DELETE /api/patient/family-members
+app.use('/api/patient/family-members', familyMembersRoutes);
+
+// GET    /api/patient/appointments               (requires patient JWT)
+// POST   /api/patient/appointments                (requires patient JWT)
+// GET    /api/patient/appointments/:id            (requires patient JWT)
+// PATCH  /api/patient/appointments/:id/cancel     (requires patient JWT)
+// PATCH  /api/patient/appointments/:id/reschedule (requires patient JWT)
+app.use('/api/patient/appointments', patientAppointmentRoutes);
+
+// GET /api/patient/doctors                      (requires patient JWT)
+// GET /api/patient/doctors/:id                   (requires patient JWT)
+// GET /api/patient/doctors/:id/availability       (requires patient JWT)
+app.use('/api/patient/doctors', patientDoctorRoutes);
+
+// GET/POST/PUT/DELETE /api/patient/emergency-contacts
+app.use('/api/patient/emergency-contacts', emergencyContactsRoutes);
+
+// ── Account Deletion Routes ────────────────────────────────────────────────────
+// POST /api/patient/account/delete         (requires patient JWT)
+// POST /api/patient/account/cancel-delete  (requires patient JWT)
+app.use('/api/patient/account', accountDeletionRoutes.patientRouter);
+
+// POST /api/doctor/account/delete          (requires doctor JWT, any approval status)
+// POST /api/doctor/account/cancel-delete   (requires doctor JWT, any approval status)
+app.use('/api/doctor/account', accountDeletionRoutes.doctorRouter);
+
+// ── Patient Medical Records Routes ────────────────────────────────────────────
+// POST   /api/patient/records            (requires patient JWT, multipart/form-data)
+// GET    /api/patient/records             (requires patient JWT)
+// GET    /api/patient/records/:id         (requires patient JWT)
+// DELETE /api/patient/records/:id         (requires patient JWT)
+app.use('/api/patient/records', patientRecordsRoutes);
+
+// ── Patient Medical History Routes ────────────────────────────────────────────
+// GET /api/patient/medical-history        (requires patient JWT)
+// PUT /api/patient/medical-history        (requires patient JWT)
+app.use('/api/patient/medical-history', patientMedicalHistoryRoutes);
+
+// ── Patient Review Routes ─────────────────────────────────────────────────────
+// POST   /api/patient/reviews                     (requires patient JWT)
+// GET    /api/patient/reviews/mine                (requires patient JWT)
+// GET    /api/patient/reviews/doctor/:doctorId    (requires patient JWT)
+// PUT    /api/patient/reviews/:id                 (requires patient JWT)
+// DELETE /api/patient/reviews/:id                 (requires patient JWT)
+app.use('/api/patient/reviews', reviewRoutes);
+
+// ── Doctor Review Routes ──────────────────────────────────────────────────────
+// GET /api/doctor/reviews/mine  (requires doctor JWT + approved status)
+app.use('/api/doctor/reviews', doctorReviewRoutes);
+
+// ── Patient Support Ticket Routes ─────────────────────────────────────────────
+// POST /api/patient/tickets              (requires patient JWT)
+// GET  /api/patient/tickets              (requires patient JWT)
+// GET  /api/patient/tickets/:id          (requires patient JWT)
+// POST /api/patient/tickets/:id/replies  (requires patient JWT)
+app.use('/api/patient/tickets', ticketRoutes);
+
+// GET    /api/patient/notifications                (requires patient JWT)
+// GET    /api/patient/notifications/unread-count    (requires patient JWT)
+// PATCH  /api/patient/notifications/read-all        (requires patient JWT)
+// PATCH  /api/patient/notifications/:id/read         (requires patient JWT)
+// DELETE /api/patient/notifications/clear           (requires patient JWT)
+// POST   /api/patient/notifications/device-token    (requires patient JWT)
+app.use('/api/patient/notifications', patientNotificationRoutes);
+
+// GET    /api/doctor/notifications                (requires doctor JWT + approved status)
+// GET    /api/doctor/notifications/unread-count    (requires doctor JWT + approved status)
+// PATCH  /api/doctor/notifications/read-all        (requires doctor JWT + approved status)
+// PATCH  /api/doctor/notifications/:id/read         (requires doctor JWT + approved status)
+// DELETE /api/doctor/notifications/clear           (requires doctor JWT + approved status)
+// POST   /api/doctor/notifications/device-token    (requires doctor JWT + approved status)
+app.use('/api/doctor/notifications', doctorNotificationRoutes);
+
+// ── Admin Support Ticket Routes ───────────────────────────────────────────────
+// GET   /api/admin/tickets?status=&category=&search=&page=&limit=
+// GET   /api/admin/tickets/stats
+// GET   /api/admin/tickets/:id
+// PATCH /api/admin/tickets/:id/status
+// POST  /api/admin/tickets/:id/replies
+app.use('/api/admin/tickets', adminTicketRoutes);
+
+// GET    /api/admin/notifications                (requires admin JWT)
+// GET    /api/admin/notifications/unread-count    (requires admin JWT)
+// PATCH  /api/admin/notifications/read-all        (requires admin JWT)
+// PATCH  /api/admin/notifications/:id/read         (requires admin JWT)
+// DELETE /api/admin/notifications/clear           (requires admin JWT)
+// POST   /api/admin/notifications/device-token    (requires admin JWT)
+app.use('/api/admin/notifications', adminNotificationRoutes);
+
+app.use('/api/consultation', consultationRoutes);
+app.use('/api/patient/consultation', patientConsultationRoutes);
+
+// ── Razorpay Webhooks ──────────────────────────────────────────────────────────
+// POST /api/webhooks/razorpay  (no auth — verified via HMAC signature instead;
+//                                mounted with express.raw() above, not here)
+// Phase 3, task 20: handles account.activated (+ related account.* events) to
+// flip Doctor.payoutStatus once Razorpay's async Route KYC check completes.
+// (Registration is above, before express.json(), since it needs the raw body.)
+
+// ── Chat Firebase Token Routes ────────────────────────────────────────────────
+// GET /api/doctor/chat/firebase-token   (requires doctor JWT)
+// GET /api/patient/chat/firebase-token  (requires patient JWT)
+app.use('/api/doctor/chat', chatTokenRoutes.doctorRouter);
+app.use('/api/patient/chat', chatTokenRoutes.patientRouter);
+
+// ── Error Handling (must be last) ─────────────────────────────────────────────
+app.use(notFound);
+app.use(errorHandler);
+
+// ── Start Server ──────────────────────────────────────────────────────────────
+// const PORT = process.env.PORT || 5000;
+// app.listen(PORT, () =>
+//   console.log(`[Server] Running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`)
+// );
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, '0.0.0.0', () => {
+	console.log(
+		`[Server] Running on port ${PORT} in ${process.env.NODE_ENV || 'development'} mode`
+	);
+	// Daily sweep that finalizes any account deletions past their grace period.
+	startAccountDeletionJob();
+	// Hourly sweep (Phase 5, task 30) that alerts admins on any Route
+	// transfer still on_hold well past consultation completion.
+	startTransferHoldMonitorJob();
+});
