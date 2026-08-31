@@ -16,10 +16,6 @@ android/
 .env.local
 .env.*.local
 
-# ── Firebase / Google service credentials ───────────────────────────────────
-google-services.json
-GoogleService-Info.plist
-
 # ── EAS ──────────────────────────────────────────────────────────────────────
 .eas/
 
