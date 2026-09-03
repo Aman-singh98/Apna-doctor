@@ -137,18 +137,18 @@ const InvoiceModal = ({ paymentId, onClose }) => {
 							/>
 							{invoice.amounts.doctorShare != null && (
 								<DetailRow
-									label={`GST @ ${invoice.amounts.doctorGstPct ?? 18}%`}
-									value={formatCurrency(invoice.amounts.doctorGstAmount ?? 0)}
+									label={`Less: GST @ ${invoice.amounts.doctorGstPct ?? 18}%`}
+									value={<span style={{ color: 'var(--red-error, #b3261e)' }}>{`- ${formatCurrency(invoice.amounts.doctorGstAmount ?? 0)}`}</span>}
 								/>
 							)}
 							<DetailRow label="Payout Status" value={invoice.transaction?.status ? <Badge status={invoice.transaction.status} /> : '—'} />
 							<div style={{ borderTop: '1px dashed var(--border-default)', margin: '6px 0' }} />
 							<DetailRow
-								label={<strong style={{ color: 'var(--navy-heading)' }}>Total Payable</strong>}
+								label={<strong style={{ color: 'var(--navy-heading)' }}>Net Payable to Doctor</strong>}
 								value={<strong style={{ fontSize: 15, color: 'var(--navy-heading)' }}>{formatCurrency(invoice.amounts.doctorGrandTotal ?? invoice.amounts.doctorShare)}</strong>}
 							/>
 							<p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-								18% GST applied as a professional/facilitation fee on the doctor's settlement amount — confirm this treatment with your CA before sending real invoices.
+								18% GST is deducted from the doctor's settlement amount before payout (withheld by the platform, not added on top) — confirm this treatment with your CA before sending real invoices.
 							</p>
 						</DetailSection>
 					)}

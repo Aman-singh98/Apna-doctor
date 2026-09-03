@@ -186,9 +186,11 @@ exports.getPaymentById = async (req, res, next) => {
 //   - Patient Receipt → GST_RATES.PATIENT_PCT (0%), applied to the full fee.
 //     Doctor consultations are GST-exempt health-care services, so this is
 //     0 by default — see constants/gstConstants.js for the reasoning.
-//   - Doctor Invoice   → GST_RATES.DOCTOR_PCT (18%), applied to the doctor's
-//     settlement amount (amounts.doctorShare) — see constants/gstConstants.js
-//     for why 18% and the disclaimer that ships alongside it.
+//   - Doctor Invoice   → GST_RATES.DOCTOR_PCT (18%), DEDUCTED from the
+//     doctor's settlement amount (amounts.doctorShare) before payout — the
+//     doctor's net payable (amounts.doctorGrandTotal) is doctorShare minus
+//     GST, not plus. See constants/gstConstants.js for why 18% and the
+//     disclaimer that ships alongside it.
 // The Admin/platform invoice is an internal statement and does not carry
 // a GST line.
 async function buildInvoiceData(appointmentId) {
@@ -217,11 +219,13 @@ async function buildInvoiceData(appointmentId) {
    const patientGstAmount = calculateGst(totalAmount, patientGstPct) ?? 0;
    const patientGrandTotal = totalAmount + patientGstAmount;
 
-   // Doctor Invoice GST (18% on the doctor's settlement amount). Only
-   // computed when a settlement amount actually exists.
+   // Doctor Invoice GST (18% on the doctor's settlement amount) — DEDUCTED
+   // from the doctor's payout, not added on top. Only computed when a
+   // settlement amount actually exists.
    const doctorGstPct = GST_RATES.DOCTOR_PCT;
    const doctorGstAmount = doctorAmount != null ? calculateGst(doctorAmount, doctorGstPct) : null;
-   const doctorGrandTotal = doctorAmount != null ? doctorAmount + doctorGstAmount : null;
+   // Net amount actually payable to the doctor after GST is withheld.
+   const doctorGrandTotal = doctorAmount != null ? doctorAmount - doctorGstAmount : null;
 
    return {
       invoiceNumber,

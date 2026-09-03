@@ -14,13 +14,19 @@
 //
 // • DOCTOR INVOICE — GST rate: 18%
 //   This invoice states the doctor's settlement amount for the consult
-//   (see amounts.doctorShare) as a professional/facilitation fee and adds
-//   18% GST on top of it — the general rate for professional/consultancy
-//   services (SAC 9982/9983) when the supplier is GST-registered.
+//   (see amounts.doctorShare) as a professional/facilitation fee and
+//   DEDUCTS 18% GST from it before payout — i.e. the doctor's net payable
+//   amount (amounts.doctorGrandTotal) is doctorShare - GST, not
+//   doctorShare + GST. This models the platform withholding/settling the
+//   GST component itself out of the doctor's share rather than paying it
+//   on top. 18% is the general rate for professional/consultancy services
+//   (SAC 9982/9983) when the supplier is GST-registered.
 //   NOTE: a doctor's direct clinical service to a patient is itself
 //   GST-exempt (same exemption as the patient receipt above); 18% here is
 //   only appropriate if this document is meant to represent a separate
-//   taxable professional/facilitation supply. This is a modelling choice,
+//   taxable professional/facilitation supply, and whether it should be
+//   deducted from the doctor vs. added on top depends on your actual
+//   commercial/agency agreement with doctors. This is a modelling choice,
 //   not settled tax law — see point 1 below.
 //
 // ── IMPORTANT — please read before relying on this in production ─────────
