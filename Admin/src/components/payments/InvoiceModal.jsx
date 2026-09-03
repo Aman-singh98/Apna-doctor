@@ -10,138 +10,24 @@
 //   - Doctor Invoice  — the doctor's settlement/earning for this consult
 //   - Admin Invoice   — the platform's commission for this consult
 //
-// PDF generation is done client-side with jsPDF so "Download" produces a
-// real .pdf file without needing a backend PDF service.
+// PDF generation happens on the BACKEND now (services/invoicePdfService.js)
+// so "Download" produces the real letterhead document — the exact file
+// that can later be emailed/sent straight to the patient or doctor,
+// instead of a generic client-rendered PDF that looked different from the
+// one the business would actually send out.
 
 import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { Loader2, Download, Receipt } from 'lucide-react';
-import jsPDF from 'jspdf';
 import ModalShell from '../common/ModalShell';
 import Badge from '../ui/Badge';
 import FilterTabs from '../common/FilterTabs';
 import { DetailRow, DetailSection } from '../common/DetailDisplay';
-import { apiGetPaymentInvoice } from '../../services/api';
+import { apiGetPaymentInvoice, apiDownloadPaymentInvoicePdf } from '../../services/api';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
 const TABS = ['Patient Receipt', 'Doctor Invoice', 'Admin Invoice'];
-
-// ── PDF builder ──────────────────────────────────────────────────────────────
-// One shared layout function, parameterised by which "side" of the invoice
-// is being rendered — keeps the three PDFs visually consistent.
-function buildInvoicePdf(invoice, kind) {
-	const doc = new jsPDF({ unit: 'pt', format: 'a4' });
-	const marginX = 48;
-	let y = 56;
-
-	const heading = { patient: 'Patient Receipt', doctor: 'Doctor Invoice', admin: 'Admin / Platform Invoice' }[kind];
-
-	// ── Brand header ───────────────────────────────────────────────────────
-	doc.setFont('helvetica', 'bold');
-	doc.setFontSize(18);
-	doc.setTextColor(28, 43, 74); // navy-heading
-	doc.text('Apna Doctor', marginX, y);
-	doc.setFontSize(11);
-	doc.setTextColor(95, 107, 124); // text-muted
-	doc.text(heading, marginX, y + 18);
-
-	doc.setFont('helvetica', 'normal');
-	doc.setFontSize(10);
-	doc.text(`Invoice No: ${invoice.invoiceNumber}`, 400, y, { align: 'left' });
-	doc.text(`Date: ${formatDateTime(invoice.generatedAt)}`, 400, y + 14, { align: 'left' });
-	doc.text(`Status: ${invoice.status?.toUpperCase() || '—'}`, 400, y + 28, { align: 'left' });
-
-	y += 56;
-	doc.setDrawColor(228, 233, 240);
-	doc.line(marginX, y, 548, y);
-	y += 28;
-
-	const row = (label, value) => {
-		doc.setFont('helvetica', 'normal');
-		doc.setFontSize(10.5);
-		doc.setTextColor(95, 107, 124);
-		doc.text(label, marginX, y);
-		doc.setTextColor(28, 43, 74);
-		doc.setFont('helvetica', 'bold');
-		doc.text(String(value ?? '—'), 548, y, { align: 'right' });
-		y += 20;
-	};
-
-	const sectionTitle = (title) => {
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(11.5);
-		doc.setTextColor(26, 115, 232); // blue-primary
-		doc.text(title, marginX, y);
-		y += 18;
-	};
-
-	// ── Consultation details (common to all three) ───────────────────────────
-	sectionTitle('Consultation');
-	row('Consult Type', invoice.consultType);
-	row('Appointment Date', formatDateTime(invoice.appointmentDate));
-	row('Doctor', invoice.doctor?.name || '—');
-	row('Patient', invoice.patient?.name || '—');
-	if (invoice.razorpayPaymentId) row('Razorpay Payment ID', invoice.razorpayPaymentId);
-	y += 8;
-
-	if (kind === 'patient') {
-		sectionTitle('Amount Paid');
-		row('Consultation Fee', formatCurrency(invoice.amounts.total));
-		doc.setDrawColor(228, 233, 240);
-		doc.line(marginX, y, 548, y);
-		y += 20;
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(13);
-		doc.setTextColor(28, 43, 74);
-		doc.text('Total Paid', marginX, y);
-		doc.text(formatCurrency(invoice.amounts.total), 548, y, { align: 'right' });
-	}
-
-	if (kind === 'doctor') {
-		sectionTitle('Earning Breakdown');
-		row('Total Consultation Fee', formatCurrency(invoice.amounts.total));
-		row(
-			`Doctor Share${invoice.amounts.doctorSplitPct != null ? ` (${invoice.amounts.doctorSplitPct}%)` : ''}`,
-			formatCurrency(invoice.amounts.doctorShare)
-		);
-		row('Payout Status', invoice.transaction?.status || 'pending');
-		doc.setDrawColor(228, 233, 240);
-		doc.line(marginX, y, 548, y);
-		y += 20;
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(13);
-		doc.setTextColor(28, 43, 74);
-		doc.text('Doctor Settlement', marginX, y);
-		doc.text(formatCurrency(invoice.amounts.doctorShare), 548, y, { align: 'right' });
-	}
-
-	if (kind === 'admin') {
-		sectionTitle('Commission Breakdown');
-		row('Total Consultation Fee', formatCurrency(invoice.amounts.total));
-		row(
-			`Platform Share${invoice.amounts.platformSplitPct != null ? ` (${invoice.amounts.platformSplitPct}%)` : ''}`,
-			formatCurrency(invoice.amounts.platformShare)
-		);
-		row('Doctor Category', invoice.doctor?.categoryLabel || '—');
-		doc.setDrawColor(228, 233, 240);
-		doc.line(marginX, y, 548, y);
-		y += 20;
-		doc.setFont('helvetica', 'bold');
-		doc.setFontSize(13);
-		doc.setTextColor(28, 43, 74);
-		doc.text('Platform Commission', marginX, y);
-		doc.text(formatCurrency(invoice.amounts.platformShare), 548, y, { align: 'right' });
-	}
-
-	y += 48;
-	doc.setFont('helvetica', 'normal');
-	doc.setFontSize(9);
-	doc.setTextColor(154, 165, 180);
-	doc.text('This is a system-generated invoice from Apna Doctor Admin Console.', marginX, y);
-
-	return doc;
-}
 
 const InvoiceModal = ({ paymentId, onClose }) => {
 	const [invoice, setInvoice] = useState(null);
@@ -162,11 +48,19 @@ const InvoiceModal = ({ paymentId, onClose }) => {
 		tab === 'Doctor Invoice' ? 'doctor' : tab === 'Admin Invoice' ? 'admin' : 'patient'
 	), [tab]);
 
-	const handleDownload = () => {
+	const [downloading, setDownloading] = useState(false);
+
+	const handleDownload = async () => {
 		if (!invoice) return;
-		const doc = buildInvoicePdf(invoice, kind);
 		const fileTag = { patient: 'patient-receipt', doctor: 'doctor-invoice', admin: 'admin-invoice' }[kind];
-		doc.save(`${invoice.invoiceNumber}-${fileTag}.pdf`);
+		setDownloading(true);
+		try {
+			await apiDownloadPaymentInvoicePdf(paymentId, kind, `${invoice.invoiceNumber}-${fileTag}.pdf`);
+		} catch (err) {
+			toast.error(err.message || 'Failed to download invoice PDF.');
+		} finally {
+			setDownloading(false);
+		}
 	};
 
 	return (
@@ -218,11 +112,18 @@ const InvoiceModal = ({ paymentId, onClose }) => {
 					{kind === 'patient' && (
 						<DetailSection label="Amount Paid">
 							<DetailRow label="Consultation Fee" value={formatCurrency(invoice.amounts.total)} />
+							<DetailRow
+								label={`GST @ ${invoice.amounts.patientGstPct ?? 0}%`}
+								value={formatCurrency(invoice.amounts.patientGstAmount ?? 0)}
+							/>
 							<div style={{ borderTop: '1px dashed var(--border-default)', margin: '6px 0' }} />
 							<DetailRow
 								label={<strong style={{ color: 'var(--navy-heading)' }}>Total Paid</strong>}
-								value={<strong style={{ fontSize: 15, color: 'var(--navy-heading)' }}>{formatCurrency(invoice.amounts.total)}</strong>}
+								value={<strong style={{ fontSize: 15, color: 'var(--navy-heading)' }}>{formatCurrency(invoice.amounts.patientGrandTotal ?? invoice.amounts.total)}</strong>}
 							/>
+							<p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+								Doctor consultations are exempt (0%) healthcare services under GST — see note below.
+							</p>
 						</DetailSection>
 					)}
 
@@ -234,12 +135,21 @@ const InvoiceModal = ({ paymentId, onClose }) => {
 								label={`Doctor Share${invoice.amounts.doctorSplitPct != null ? ` (${invoice.amounts.doctorSplitPct}%)` : ''}`}
 								value={formatCurrency(invoice.amounts.doctorShare)}
 							/>
+							{invoice.amounts.doctorShare != null && (
+								<DetailRow
+									label={`GST @ ${invoice.amounts.doctorGstPct ?? 18}%`}
+									value={formatCurrency(invoice.amounts.doctorGstAmount ?? 0)}
+								/>
+							)}
 							<DetailRow label="Payout Status" value={invoice.transaction?.status ? <Badge status={invoice.transaction.status} /> : '—'} />
 							<div style={{ borderTop: '1px dashed var(--border-default)', margin: '6px 0' }} />
 							<DetailRow
-								label={<strong style={{ color: 'var(--navy-heading)' }}>Doctor Settlement</strong>}
-								value={<strong style={{ fontSize: 15, color: 'var(--navy-heading)' }}>{formatCurrency(invoice.amounts.doctorShare)}</strong>}
+								label={<strong style={{ color: 'var(--navy-heading)' }}>Total Payable</strong>}
+								value={<strong style={{ fontSize: 15, color: 'var(--navy-heading)' }}>{formatCurrency(invoice.amounts.doctorGrandTotal ?? invoice.amounts.doctorShare)}</strong>}
 							/>
+							<p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+								18% GST applied as a professional/facilitation fee on the doctor's settlement amount — confirm this treatment with your CA before sending real invoices.
+							</p>
 						</DetailSection>
 					)}
 
@@ -266,16 +176,29 @@ const InvoiceModal = ({ paymentId, onClose }) => {
 						</p>
 					)}
 
-					{/* Download */}
+					{kind !== 'admin' && (
+						<p style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 10 }}>
+							GSTIN not yet registered — GST lines are shown for reference only until a valid GSTIN is added (see config/companyConfig.js).
+						</p>
+					)}
+
+					{/* Download — now fetches the real letterhead PDF from the backend
+					    (services/invoicePdfService.js), the same file that can be
+					    emailed/sent directly to the patient or doctor. */}
 					<button
 						onClick={handleDownload}
+						disabled={downloading}
 						style={{
 							marginTop: 8, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
 							padding: '10px 16px', borderRadius: 8, border: 'none',
-							background: 'var(--blue-primary)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+							background: 'var(--blue-primary)', color: '#fff', fontSize: 13.5, fontWeight: 700,
+							cursor: downloading ? 'default' : 'pointer', opacity: downloading ? 0.7 : 1,
 						}}
 					>
-						<Download size={15} /> Download {tab} (PDF)
+						{downloading
+							? <Loader2 size={15} style={{ animation: 'spin 0.8s linear infinite' }} />
+							: <Download size={15} />}
+						{downloading ? 'Preparing PDF…' : `Download ${tab} (PDF)`}
 					</button>
 				</motion.div>
 			)}

@@ -64,6 +64,23 @@ const AppointmentDetailModal = ({ appointmentId, onClose }) => {
 						<Row label="Status" value={<Badge status={appointment.status} />} />
 						{appointment.diagnosis && <Row label="Diagnosis" value={appointment.diagnosis} />}
 						{appointment.cancelReason && <Row label="Cancel Reason" value={appointment.cancelReason} />}
+
+						{/* ── Payment details ──────────────────────────────────────────
+						    appointment.paymentStatus / razorpayOrderId / razorpayPaymentId
+						    come straight from the Appointment document (see
+						    models/Appointment.js — the appointment IS the payment record).
+						    A legacy appointment created before payments were wired up has
+						    no paymentStatus at all, so it's shown as "Legacy / Pre-payment"
+						    rather than a blank dash that could be mistaken for "unpaid". */}
+						<div style={{ marginTop: 4, marginBottom: -2, fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.6 }}>
+							Payment
+						</div>
+						<Row
+							label="Payment Status"
+							value={appointment.paymentStatus ? <Badge status={appointment.paymentStatus} /> : <span style={{ color: 'var(--text-muted)' }}>Legacy / Pre-payment</span>}
+						/>
+						{appointment.razorpayOrderId && <Row label="Razorpay Order ID" value={appointment.razorpayOrderId} />}
+						{appointment.razorpayPaymentId && <Row label="Razorpay Payment ID" value={appointment.razorpayPaymentId} />}
 					</div>
 				)}
 			</motion.div>

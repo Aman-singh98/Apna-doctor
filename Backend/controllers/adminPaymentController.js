@@ -20,6 +20,8 @@ const Transaction = require('../models/Transaction');
 const { refundAppointment } = require('../services/refundService');
 const { PAYMENT_STATUS, PAYMENT_STATUS_VALUES } = require('../constants/paymentConstants');
 const { getLabelForCategory, getSplitForCategory } = require('../config/doctorFeeConfig');
+const { GST_RATES, calculateGst } = require('../constants/gstConstants');
+const { streamInvoicePdf } = require('../services/invoicePdfService');
 
 // Only appointments that actually went through the Razorpay flow count as
 // "a payment" for this page — legacy pre-integration rows have no
@@ -175,80 +177,136 @@ exports.getPaymentById = async (req, res, next) => {
 // This is what powers the "separate doctor invoice / admin invoice" views
 // in the admin panel — one call gives the frontend everything it needs to
 // render all three without stitching together multiple requests.
+// ── Shared invoice-data builder ─────────────────────────────────────────────
+// Used by both the JSON endpoint (getPaymentInvoice, below) and the PDF
+// endpoint (downloadPaymentInvoicePdf) so the two never drift apart — one
+// place computes the numbers, the JSON view and the PDF just render them.
+//
+// Adds the GST breakdown for the two customer-facing documents:
+//   - Patient Receipt → GST_RATES.PATIENT_PCT (0%), applied to the full fee.
+//     Doctor consultations are GST-exempt health-care services, so this is
+//     0 by default — see constants/gstConstants.js for the reasoning.
+//   - Doctor Invoice   → GST_RATES.DOCTOR_PCT (18%), applied to the doctor's
+//     settlement amount (amounts.doctorShare) — see constants/gstConstants.js
+//     for why 18% and the disclaimer that ships alongside it.
+// The Admin/platform invoice is an internal statement and does not carry
+// a GST line.
+async function buildInvoiceData(appointmentId) {
+   const appointment = await Appointment.findOne({ _id: appointmentId, ...HAS_PAYMENT_RECORD })
+      .populate('doctor', 'name phone specialization category qualification regNumber hospital')
+      .populate('patient', 'name phone email')
+      .populate('familyMember', 'name relation');
+
+   if (!appointment) return null;
+
+   // Legacy / edge-case rows (e.g. a payment that never got a Route
+   // transfer created — see paymentWebhookService.js) may have no
+   // Transaction at all; the invoice still renders, just without a
+   // doctor/admin split.
+   const transaction = await Transaction.findOne({ appointment: appointment._id });
+
+   const totalAmount = appointment.fee || 0;
+   const doctorAmount = transaction ? transaction.amount : null;
+   const platformAmount = transaction ? transaction.platformAmount : null;
+   const split = appointment.doctor ? getSplitForCategory(appointment.doctor.category) : null;
+
+   const invoiceNumber = `INV-${String(appointment._id).slice(-8).toUpperCase()}`;
+
+   // Patient Receipt GST (currently 0% — exempt health-care service).
+   const patientGstPct = GST_RATES.PATIENT_PCT;
+   const patientGstAmount = calculateGst(totalAmount, patientGstPct) ?? 0;
+   const patientGrandTotal = totalAmount + patientGstAmount;
+
+   // Doctor Invoice GST (18% on the doctor's settlement amount). Only
+   // computed when a settlement amount actually exists.
+   const doctorGstPct = GST_RATES.DOCTOR_PCT;
+   const doctorGstAmount = doctorAmount != null ? calculateGst(doctorAmount, doctorGstPct) : null;
+   const doctorGrandTotal = doctorAmount != null ? doctorAmount + doctorGstAmount : null;
+
+   return {
+      invoiceNumber,
+      generatedAt: new Date(),
+      appointmentId: appointment._id,
+      status: appointment.paymentStatus,
+      consultType: appointment.type,
+      appointmentDate: appointment.date,
+      createdAt: appointment.createdAt,
+      razorpayOrderId: appointment.razorpayOrderId || null,
+      razorpayPaymentId: appointment.razorpayPaymentId || null,
+
+      patient: {
+         name: appointment.familyMember?.name || appointment.patient?.name || appointment.patientName,
+         phone: appointment.patient?.phone || appointment.patientPhone || null,
+         email: appointment.patient?.email || null,
+         bookedFor: appointment.familyMember ? 'Family Member' : 'Self',
+         relation: appointment.familyMember?.relation || null,
+         accountHolder: appointment.patient?.name || null,
+      },
+
+      doctor: appointment.doctor ? {
+         id: appointment.doctor._id,
+         name: appointment.doctor.name,
+         phone: appointment.doctor.phone,
+         specialization: appointment.doctor.specialization,
+         qualification: appointment.doctor.qualification,
+         regNumber: appointment.doctor.regNumber,
+         hospital: appointment.doctor.hospital,
+         category: appointment.doctor.category,
+         categoryLabel: getLabelForCategory(appointment.doctor.category),
+      } : null,
+
+      amounts: {
+         total: totalAmount,
+         doctorShare: doctorAmount,
+         platformShare: platformAmount,
+         doctorSplitPct: split?.doctor ?? null,
+         platformSplitPct: split?.platform ?? null,
+
+         patientGstPct,
+         patientGstAmount,
+         patientGrandTotal,
+
+         doctorGstPct,
+         doctorGstAmount,
+         doctorGrandTotal,
+      },
+
+      transaction: transaction ? {
+         id: transaction._id,
+         status: transaction.status,
+         razorpayTransferId: transaction.razorpayTransferId || null,
+         onHold: transaction.onHold,
+      } : null,
+   };
+}
+
+// ── GET /api/admin/payments/:id/invoice ─────────────────────────────────────
 exports.getPaymentInvoice = async (req, res, next) => {
    try {
-      const appointment = await Appointment.findOne({ _id: req.params.id, ...HAS_PAYMENT_RECORD })
-         .populate('doctor', 'name phone specialization category qualification regNumber hospital')
-         .populate('patient', 'name phone email')
-         .populate('familyMember', 'name relation');
-
-      if (!appointment) {
+      const invoice = await buildInvoiceData(req.params.id);
+      if (!invoice) {
          return res.status(404).json({ success: false, message: 'Payment record not found.' });
       }
+      res.status(200).json({ success: true, invoice });
+   } catch (err) {
+      next(err);
+   }
+};
 
-      // Legacy / edge-case rows (e.g. a payment that never got a Route
-      // transfer created — see paymentWebhookService.js) may have no
-      // Transaction at all; the invoice still renders, just without a
-      // doctor/admin split.
-      const transaction = await Transaction.findOne({ appointment: appointment._id });
-
-      const totalAmount = appointment.fee || 0;
-      const doctorAmount = transaction ? transaction.amount : null;
-      const platformAmount = transaction ? transaction.platformAmount : null;
-      const split = appointment.doctor ? getSplitForCategory(appointment.doctor.category) : null;
-
-      const invoiceNumber = `INV-${String(appointment._id).slice(-8).toUpperCase()}`;
-
-      res.status(200).json({
-         success: true,
-         invoice: {
-            invoiceNumber,
-            generatedAt: new Date(),
-            appointmentId: appointment._id,
-            status: appointment.paymentStatus,
-            consultType: appointment.type,
-            appointmentDate: appointment.date,
-            createdAt: appointment.createdAt,
-            razorpayOrderId: appointment.razorpayOrderId || null,
-            razorpayPaymentId: appointment.razorpayPaymentId || null,
-
-            patient: {
-               name: appointment.familyMember?.name || appointment.patient?.name || appointment.patientName,
-               phone: appointment.patient?.phone || appointment.patientPhone || null,
-               email: appointment.patient?.email || null,
-               bookedFor: appointment.familyMember ? 'Family Member' : 'Self',
-               relation: appointment.familyMember?.relation || null,
-               accountHolder: appointment.patient?.name || null,
-            },
-
-            doctor: appointment.doctor ? {
-               id: appointment.doctor._id,
-               name: appointment.doctor.name,
-               phone: appointment.doctor.phone,
-               specialization: appointment.doctor.specialization,
-               qualification: appointment.doctor.qualification,
-               regNumber: appointment.doctor.regNumber,
-               hospital: appointment.doctor.hospital,
-               category: appointment.doctor.category,
-               categoryLabel: getLabelForCategory(appointment.doctor.category),
-            } : null,
-
-            amounts: {
-               total: totalAmount,
-               doctorShare: doctorAmount,
-               platformShare: platformAmount,
-               doctorSplitPct: split?.doctor ?? null,
-               platformSplitPct: split?.platform ?? null,
-            },
-
-            transaction: transaction ? {
-               id: transaction._id,
-               status: transaction.status,
-               razorpayTransferId: transaction.razorpayTransferId || null,
-               onHold: transaction.onHold,
-            } : null,
-         },
-      });
+// ── GET /api/admin/payments/:id/invoice/pdf?kind=patient|doctor|admin ──────
+// Streams the same invoice data as getPaymentInvoice above, but rendered as
+// a PDF on the real Apna Doctor Healthcare LLP letterhead (see
+// services/invoicePdfService.js) — this is the file that can later be
+// attached to an email/WhatsApp message sent directly to the patient or
+// doctor without any further formatting work.
+exports.downloadPaymentInvoicePdf = async (req, res, next) => {
+   try {
+      const kind = ['patient', 'doctor', 'admin'].includes(req.query.kind) ? req.query.kind : 'patient';
+      const invoice = await buildInvoiceData(req.params.id);
+      if (!invoice) {
+         return res.status(404).json({ success: false, message: 'Payment record not found.' });
+      }
+      await streamInvoicePdf(res, invoice, kind);
    } catch (err) {
       next(err);
    }

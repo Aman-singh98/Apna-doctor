@@ -275,6 +275,29 @@ export const apiGetPaymentInvoice = (id) =>
 	fetch(`${BASE}/admin/payments/${id}/invoice`, { headers: headers() }).then(handle);
 
 /**
+ * GET /admin/payments/:id/invoice/pdf?kind=patient|doctor|admin
+ * Returns the invoice rendered on the real letterhead as a PDF Blob — the
+ * same file that can later be emailed/sent straight to the patient or
+ * doctor. Triggers a browser download of that blob.
+ */
+export const apiDownloadPaymentInvoicePdf = async (id, kind, filename) => {
+	const res = await fetch(`${BASE}/admin/payments/${id}/invoice/pdf?kind=${kind}`, { headers: headers() });
+	if (!res.ok) {
+		const data = await res.json().catch(() => ({}));
+		throw new Error(data.message || `HTTP ${res.status}`);
+	}
+	const blob = await res.blob();
+	const url = window.URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = filename || `${id}-${kind}-invoice.pdf`;
+	document.body.appendChild(a);
+	a.click();
+	a.remove();
+	window.URL.revokeObjectURL(url);
+};
+
+/**
  * PATCH /admin/payments/:id/refund
  * @param {string} id
  * @param {string} reason
