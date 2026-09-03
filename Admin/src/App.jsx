@@ -16,9 +16,6 @@ import PatientsPage from './pages/PatientsPage';
 import SupportPage from './pages/SupportPage';
 import AppointmentsPage from './pages/AppointmentsPage';
 import PaymentsPage from './pages/PaymentsPage';
-import {
-	ContentPage,
-} from './pages/OtherPages';
 
 const App = () => (
 	<AuthProvider>
@@ -36,7 +33,6 @@ const App = () => (
 						<Route path="/appointments" element={<AppointmentsPage />} />
 						<Route path="/payments" element={<PaymentsPage />} />
 						<Route path="/support" element={<SupportPage />} />
-						<Route path="/content" element={<ContentPage />} />
 					</Route>
 				</Route>
 

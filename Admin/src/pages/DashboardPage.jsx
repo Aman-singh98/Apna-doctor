@@ -69,7 +69,7 @@ const DashboardPage = () => {
          </div>
 
          {/* ── Revenue Chart + Quick Stats ───────────────────────────────────────── */}
-         <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
+         <div className="dashboard-secondary-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 16 }}>
 
             {/* Area chart */}
             <motion.div

@@ -5,7 +5,7 @@
 import { Search } from 'lucide-react';
 
 const SearchInput = ({ value, onChange, placeholder = 'Search…', width = 220 }) => (
-	<div style={{ position: 'relative' }}>
+	<div style={{ position: 'relative', width: '100%', maxWidth: width }}>
 		<Search size={14} style={{
 			position: 'absolute', left: 10, top: '50%',
 			transform: 'translateY(-50%)', color: 'var(--text-muted)',
@@ -16,7 +16,8 @@ const SearchInput = ({ value, onChange, placeholder = 'Search…', width = 220 }
 			value={value}
 			onChange={(e) => onChange(e.target.value)}
 			style={{
-				paddingLeft: 30, paddingRight: 12, height: 34, width,
+				paddingLeft: 30, paddingRight: 12, height: 34, width: '100%',
+				boxSizing: 'border-box',
 				border: '1.5px solid var(--border-default)', borderRadius: 'var(--radius-sm)',
 				fontSize: 13, fontFamily: 'var(--font-base)', outline: 'none',
 				background: 'var(--bg-card)', color: 'var(--text-body)',

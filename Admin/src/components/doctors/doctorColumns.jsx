@@ -39,13 +39,24 @@ export const getDoctorColumns = ({
 		{
 			key: 'name', label: 'Doctor',
 			render: (v, row) => (
-				<div>
-					<p style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy-heading)' }}>
-						{v || `+91 ${row.phone}`}
-					</p>
-					<p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 1 }}>
-						{row.specialization || 'Signup not completed'}
-					</p>
+				<div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+					<div style={{
+						width: 32, height: 32, borderRadius: '50%', background: 'var(--blue-tint)',
+						display: 'flex', alignItems: 'center', justifyContent: 'center',
+						fontSize: 12.5, fontWeight: 700, color: 'var(--blue-primary)', overflow: 'hidden', flexShrink: 0,
+					}}>
+						{row.photoUrl
+							? <img src={row.photoUrl} alt={v || 'Doctor'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+							: (v || '?').charAt(0).toUpperCase()}
+					</div>
+					<div>
+						<p style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy-heading)' }}>
+							{v || `+91 ${row.phone}`}
+						</p>
+						<p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 1 }}>
+							{row.specialization || 'Signup not completed'}
+						</p>
+					</div>
 				</div>
 			),
 		},

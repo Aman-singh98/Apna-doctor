@@ -69,10 +69,11 @@ const LoginPage = () => {
 	};
 
 	return (
-		<div style={{ display: 'flex', height: '100vh', fontFamily: 'var(--font-base)' }}>
+		<div className="login-page-container" style={{ display: 'flex', height: '100vh', fontFamily: 'var(--font-base)' }}>
 
 			{/* ── Left: Brand Panel ───────────────────────────────────────────────── */}
 			<motion.div
+				className="login-brand-panel"
 				initial={{ opacity: 0 }}
 				animate={{ opacity: 1 }}
 				transition={{ duration: 0.6 }}
@@ -137,7 +138,7 @@ const LoginPage = () => {
 				</motion.div>
 
 				{/* Stat pills */}
-				<div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+				<div className="login-brand-stats" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 					<StatPill icon={Users} label="Active Doctors" value="500+" delay={0.5} />
 					<StatPill icon={ActivityStat} label="Patients Served" value="3,000+" delay={0.6} />
 					<StatPill icon={FileText} label="Consultations Today" value="124" delay={0.7} />
@@ -146,12 +147,13 @@ const LoginPage = () => {
 
 			{/* ── Right: Login Form ───────────────────────────────────────────────── */}
 			<motion.div
+				className="login-form-panel"
 				initial={{ opacity: 0, x: 24 }}
 				animate={{ opacity: 1, x: 0 }}
 				transition={{ delay: 0.2, duration: 0.5 }}
 				style={{
 					flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-					background: 'var(--bg-page)', padding: '40px 32px',
+					background: 'var(--bg-page)', padding: '40px 32px', boxSizing: 'border-box',
 				}}
 			>
 				<div style={{ width: '100%', maxWidth: 400 }}>

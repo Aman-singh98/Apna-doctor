@@ -72,7 +72,7 @@ const SupportPage = () => {
 			</motion.div>
 
 			{/* ── Footer: count + pagination ─────────────────────────────────── */}
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
 				<p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
 					Showing {tickets.length} of {total} tickets
 				</p>

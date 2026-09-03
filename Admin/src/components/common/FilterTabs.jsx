@@ -7,6 +7,7 @@ const FilterTabs = ({ tabs, activeTab, onChange }) => (
 		display: 'flex', gap: 6,
 		background: 'var(--bg-card)', border: '1px solid var(--border-default)',
 		borderRadius: 'var(--radius-sm)', padding: 4,
+		overflowX: 'auto', maxWidth: '100%',
 	}}>
 		{tabs.map((tab) => (
 			<button
@@ -18,6 +19,7 @@ const FilterTabs = ({ tabs, activeTab, onChange }) => (
 					background: activeTab === tab ? 'var(--blue-primary)' : 'transparent',
 					color: activeTab === tab ? '#fff' : 'var(--text-muted)',
 					transition: 'all 0.15s',
+					whiteSpace: 'nowrap', flexShrink: 0,
 				}}
 			>
 				{tab}

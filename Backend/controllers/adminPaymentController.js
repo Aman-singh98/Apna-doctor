@@ -16,8 +16,10 @@
 // so there is exactly one place in the codebase that can move money back.
 
 const Appointment = require('../models/Appointment');
+const Transaction = require('../models/Transaction');
 const { refundAppointment } = require('../services/refundService');
 const { PAYMENT_STATUS, PAYMENT_STATUS_VALUES } = require('../constants/paymentConstants');
+const { getLabelForCategory, getSplitForCategory } = require('../config/doctorFeeConfig');
 
 // Only appointments that actually went through the Razorpay flow count as
 // "a payment" for this page — legacy pre-integration rows have no
@@ -160,6 +162,93 @@ exports.getPaymentById = async (req, res, next) => {
       }
 
       res.status(200).json({ success: true, payment: appointment });
+   } catch (err) {
+      next(err);
+   }
+};
+
+// ── GET /api/admin/payments/:id/invoice ─────────────────────────────────────
+// Full invoice breakdown for one payment: the patient-facing amount, PLUS
+// the doctor's share and the platform's (admin's) share, sourced from the
+// linked Transaction (see models/Transaction.js — created alongside every
+// paid Appointment; amount = doctor's cut, platformAmount = admin's cut).
+// This is what powers the "separate doctor invoice / admin invoice" views
+// in the admin panel — one call gives the frontend everything it needs to
+// render all three without stitching together multiple requests.
+exports.getPaymentInvoice = async (req, res, next) => {
+   try {
+      const appointment = await Appointment.findOne({ _id: req.params.id, ...HAS_PAYMENT_RECORD })
+         .populate('doctor', 'name phone specialization category qualification regNumber hospital')
+         .populate('patient', 'name phone email')
+         .populate('familyMember', 'name relation');
+
+      if (!appointment) {
+         return res.status(404).json({ success: false, message: 'Payment record not found.' });
+      }
+
+      // Legacy / edge-case rows (e.g. a payment that never got a Route
+      // transfer created — see paymentWebhookService.js) may have no
+      // Transaction at all; the invoice still renders, just without a
+      // doctor/admin split.
+      const transaction = await Transaction.findOne({ appointment: appointment._id });
+
+      const totalAmount = appointment.fee || 0;
+      const doctorAmount = transaction ? transaction.amount : null;
+      const platformAmount = transaction ? transaction.platformAmount : null;
+      const split = appointment.doctor ? getSplitForCategory(appointment.doctor.category) : null;
+
+      const invoiceNumber = `INV-${String(appointment._id).slice(-8).toUpperCase()}`;
+
+      res.status(200).json({
+         success: true,
+         invoice: {
+            invoiceNumber,
+            generatedAt: new Date(),
+            appointmentId: appointment._id,
+            status: appointment.paymentStatus,
+            consultType: appointment.type,
+            appointmentDate: appointment.date,
+            createdAt: appointment.createdAt,
+            razorpayOrderId: appointment.razorpayOrderId || null,
+            razorpayPaymentId: appointment.razorpayPaymentId || null,
+
+            patient: {
+               name: appointment.familyMember?.name || appointment.patient?.name || appointment.patientName,
+               phone: appointment.patient?.phone || appointment.patientPhone || null,
+               email: appointment.patient?.email || null,
+               bookedFor: appointment.familyMember ? 'Family Member' : 'Self',
+               relation: appointment.familyMember?.relation || null,
+               accountHolder: appointment.patient?.name || null,
+            },
+
+            doctor: appointment.doctor ? {
+               id: appointment.doctor._id,
+               name: appointment.doctor.name,
+               phone: appointment.doctor.phone,
+               specialization: appointment.doctor.specialization,
+               qualification: appointment.doctor.qualification,
+               regNumber: appointment.doctor.regNumber,
+               hospital: appointment.doctor.hospital,
+               category: appointment.doctor.category,
+               categoryLabel: getLabelForCategory(appointment.doctor.category),
+            } : null,
+
+            amounts: {
+               total: totalAmount,
+               doctorShare: doctorAmount,
+               platformShare: platformAmount,
+               doctorSplitPct: split?.doctor ?? null,
+               platformSplitPct: split?.platform ?? null,
+            },
+
+            transaction: transaction ? {
+               id: transaction._id,
+               status: transaction.status,
+               razorpayTransferId: transaction.razorpayTransferId || null,
+               onHold: transaction.onHold,
+            } : null,
+         },
+      });
    } catch (err) {
       next(err);
    }

@@ -112,7 +112,7 @@ const PatientsPage = () => {
 			</motion.div>
 
 			{/* ── Footer: count + pagination ─────────────────────────────────── */}
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
 				<p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
 					Showing {patients.length} of {total} patients
 				</p>

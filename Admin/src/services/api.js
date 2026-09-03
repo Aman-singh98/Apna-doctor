@@ -268,6 +268,13 @@ export const apiGetPaymentById = (id) =>
 	fetch(`${BASE}/admin/payments/${id}`, { headers: headers() }).then(handle);
 
 /**
+ * GET /admin/payments/:id/invoice
+ * → { success, invoice: { invoiceNumber, patient, doctor, amounts: { total, doctorShare, platformShare, doctorSplitPct, platformSplitPct }, transaction, ... } }
+ */
+export const apiGetPaymentInvoice = (id) =>
+	fetch(`${BASE}/admin/payments/${id}/invoice`, { headers: headers() }).then(handle);
+
+/**
  * PATCH /admin/payments/:id/refund
  * @param {string} id
  * @param {string} reason

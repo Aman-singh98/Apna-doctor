@@ -6,7 +6,7 @@ const Pagination = ({ page, pages, onPageChange }) => {
 	if (pages <= 1) return null;
 
 	return (
-		<div style={{ display: 'flex', gap: 6 }}>
+		<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
 			{Array.from({ length: pages }, (_, i) => i + 1).map((p) => (
 				<button
 					key={p}

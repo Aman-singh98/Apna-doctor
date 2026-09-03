@@ -7,14 +7,14 @@ import { X } from 'lucide-react';
 import { MODAL_STYLES } from './modalStyles';
 
 const ModalShell = ({ children, onClose, width = 420, maxHeight, style = {} }) => (
-	<div style={MODAL_STYLES.overlay}>
+	<div className="modal-overlay" style={MODAL_STYLES.overlay}>
 		<motion.div
 			initial={{ opacity: 0, scale: 0.95 }}
 			animate={{ opacity: 1, scale: 1 }}
 			exit={{ opacity: 0, scale: 0.95 }}
 			style={{
 				...MODAL_STYLES.card,
-				width,
+				maxWidth: width,
 				...(maxHeight && { maxHeight, overflowY: 'auto' }),
 				...style,
 			}}

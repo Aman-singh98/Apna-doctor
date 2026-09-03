@@ -9,6 +9,7 @@
 // GET   /api/admin/payments        → list (filters: ?status=&search=&page=&limit=)
 // GET   /api/admin/payments/stats  → counts by status + total collected
 // GET   /api/admin/payments/:id    → single payment (Appointment) detail
+// GET   /api/admin/payments/:id/invoice → full invoice (patient amount + doctor/admin split)
 // PATCH /api/admin/payments/:id/refund → issue a refund (body: { reason })
 
 const express = require('express');
@@ -16,6 +17,7 @@ const {
    listPayments,
    getPaymentStats,
    getPaymentById,
+   getPaymentInvoice,
    refundPayment,
 } = require('../controllers/adminPaymentController');
 
@@ -25,6 +27,7 @@ const router = express.Router();
 router.get('/stats', getPaymentStats);
 router.get('/', listPayments);
 router.get('/:id', getPaymentById);
+router.get('/:id/invoice', getPaymentInvoice);
 router.patch('/:id/refund', refundPayment);
 
 module.exports = router;

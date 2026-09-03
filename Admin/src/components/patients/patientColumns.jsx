@@ -50,9 +50,20 @@ export function getPatientColumns({
       {
          key: 'name', label: 'Patient',
          render: (v, row) => (
-            <div>
-               <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy-heading)' }}>{v || 'Unnamed'}</p>
-               <p style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Age {computeAge(row.dob)} • {row.phone}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+               <div style={{
+                  width: 32, height: 32, borderRadius: '50%', background: 'var(--blue-tint)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12.5, fontWeight: 700, color: 'var(--blue-primary)', overflow: 'hidden', flexShrink: 0,
+               }}>
+                  {row.photo?.url
+                     ? <img src={row.photo.url} alt={v || 'Patient'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                     : (v || '?').charAt(0).toUpperCase()}
+               </div>
+               <div>
+                  <p style={{ fontWeight: 600, fontSize: 13, color: 'var(--navy-heading)' }}>{v || 'Unnamed'}</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>Age {computeAge(row.dob)} • {row.phone}</p>
+               </div>
             </div>
          ),
       },

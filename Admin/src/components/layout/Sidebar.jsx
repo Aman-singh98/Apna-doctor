@@ -6,11 +6,14 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
    LayoutDashboard, Stethoscope, Users, CalendarCheck,
-   CreditCard, HeadphonesIcon, BookImage, LogOut,
+   CreditCard, HeadphonesIcon, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 // ── Navigation items mapped to admin modules from PDF scope ──────────────────
+// NOTE: the "Content" nav item (banners/FAQs) was removed — it only ever
+// pointed at static mock data (pages/OtherPages.jsx, now deleted) and was
+// never wired to a real backend.
 const NAV_ITEMS = [
    { to: '/dashboard', label: 'Dashboard', Icon: LayoutDashboard },
    { to: '/doctors', label: 'Doctors', Icon: Stethoscope },
@@ -18,10 +21,9 @@ const NAV_ITEMS = [
    { to: '/appointments', label: 'Appointments', Icon: CalendarCheck },
    { to: '/payments', label: 'Payments', Icon: CreditCard },
    { to: '/support', label: 'Support', Icon: HeadphonesIcon },
-   { to: '/content', label: 'Content', Icon: BookImage },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen = false, onClose }) => {
    const { admin, logout } = useAuth();
    const navigate = useNavigate();
 
@@ -31,15 +33,18 @@ const Sidebar = () => {
    };
 
    return (
-      <aside style={{
-         width: 'var(--sidebar-width)',
-         height: '100vh',
-         background: 'var(--bg-sidebar)',
-         borderRight: '1px solid var(--border-default)',
-         display: 'flex', flexDirection: 'column',
-         position: 'fixed', top: 0, left: 0, zIndex: 100,
-         padding: '0 0 16px',
-      }}>
+      <aside
+         className={`admin-sidebar${isOpen ? ' is-open' : ''}`}
+         style={{
+            width: 'var(--sidebar-width)',
+            height: '100vh',
+            background: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border-default)',
+            display: 'flex', flexDirection: 'column',
+            position: 'fixed', top: 0, left: 0, zIndex: 100,
+            padding: '0 0 16px',
+         }}
+      >
 
          {/* ── Brand ──────────────────────────────────────────────────────────── */}
          <div style={{
@@ -83,6 +88,7 @@ const Sidebar = () => {
                <NavLink
                   key={to}
                   to={to}
+                  onClick={onClose}
                   style={{ textDecoration: 'none', display: 'block', marginBottom: 2 }}
                >
                   {({ isActive }) => (

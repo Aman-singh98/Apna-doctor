@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Receipt } from 'lucide-react';
 import Badge from '../ui/Badge';
 import { formatCurrency, formatDateTime } from '../../utils/formatters';
 
@@ -20,7 +20,7 @@ const actionBtnStyle = (color) => ({
 // controllers/adminPaymentController.js) — razorpayPaymentId is the closest
 // thing this codebase has to a "transaction ID", so that's what's shown
 // (falling back to the order ID for payments that never reached capture).
-export const getPaymentColumns = ({ actionLoadingId, onRefund }) => [
+export const getPaymentColumns = ({ actionLoadingId, onRefund, onViewInvoice }) => [
 	{
 		key: 'razorpayPaymentId',
 		label: 'Txn ID',
@@ -47,18 +47,33 @@ export const getPaymentColumns = ({ actionLoadingId, onRefund }) => [
 	{
 		key: 'actions',
 		label: 'Actions',
-		render: (_, row) =>
-			row.status === 'paid' ? (
-				<button
-					onClick={() => onRefund(row)}
-					disabled={actionLoadingId === row._id}
-					title="Refund"
-					style={actionBtnStyle('var(--purple-accent)')}
-				>
-					<RefreshCw size={13} /> Refund
-				</button>
-			) : (
-				<span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>—</span>
-			),
+		render: (_, row) => (
+			<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+				{/* Invoice is only meaningful once a transaction actually happened
+				    (paid or refunded) — pending/failed rows have no settled amounts. */}
+				{(row.status === 'paid' || row.status === 'refunded') && (
+					<button
+						onClick={() => onViewInvoice(row)}
+						title="View / download invoice"
+						style={actionBtnStyle('var(--blue-primary)')}
+					>
+						<Receipt size={13} /> Invoice
+					</button>
+				)}
+				{row.status === 'paid' && (
+					<button
+						onClick={() => onRefund(row)}
+						disabled={actionLoadingId === row._id}
+						title="Refund"
+						style={actionBtnStyle('var(--purple-accent)')}
+					>
+						<RefreshCw size={13} /> Refund
+					</button>
+				)}
+				{row.status !== 'paid' && row.status !== 'refunded' && (
+					<span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>—</span>
+				)}
+			</div>
+		),
 	},
 ];

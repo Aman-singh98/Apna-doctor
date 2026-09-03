@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, Clock, Loader2, Phone, Star, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Loader2, Phone, Star, Trash2, Wallet, BadgeCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ModalShell from '../common/ModalShell';
 import Badge from '../ui/Badge';
@@ -18,6 +18,15 @@ function deletionLabel(accountStatus) {
 	if (accountStatus === 'deleted') return 'Deleted';
 	return null;
 }
+
+// Mirror of Backend/config/doctorFeeConfig.js labels — the Admin app has no
+// direct import path into that backend-only file (separate app/deploy),
+// same manual-sync pattern already used for utils/paymentConstants.js.
+const CATEGORY_LABELS = {
+	gp: 'MBBS (General Physician)',
+	specialist: 'Specialist (MD)',
+	super_specialist: 'Super Specialist (MBBS / MD / DM)',
+};
 
 const DoctorDetailModal = ({ doctorId, onClose }) => {
 	const [doctor, setDoctor] = useState(null);
@@ -47,15 +56,28 @@ const DoctorDetailModal = ({ doctorId, onClose }) => {
 				<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 					{/* Header */}
 					<div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
-						<div style={{
-							width: 52, height: 52, borderRadius: '50%', background: 'var(--blue-tint)',
-							display: 'flex', alignItems: 'center', justifyContent: 'center',
-							fontSize: 18, fontWeight: 700, color: 'var(--blue-primary)', overflow: 'hidden', flexShrink: 0,
-						}}>
-							{doctor.photoUrl
-								? <img src={doctor.photoUrl} alt={doctor.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-								: (doctor.name || '?').charAt(0).toUpperCase()}
-						</div>
+						{doctor.photoUrl ? (
+							<a
+								href={doctor.photoUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+								title="Open full-size photo"
+								style={{
+									width: 60, height: 60, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+									border: '2px solid var(--blue-tint)', display: 'block',
+								}}
+							>
+								<img src={doctor.photoUrl} alt={doctor.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+							</a>
+						) : (
+							<div style={{
+								width: 60, height: 60, borderRadius: '50%', background: 'var(--blue-tint)',
+								display: 'flex', alignItems: 'center', justifyContent: 'center',
+								fontSize: 19, fontWeight: 700, color: 'var(--blue-primary)', flexShrink: 0,
+							}}>
+								{(doctor.name || '?').charAt(0).toUpperCase()}
+							</div>
+						)}
 						<div style={{ flex: 1 }}>
 							<h3 style={{ fontSize: 17, fontWeight: 700, color: 'var(--navy-heading)' }}>
 								{doctor.name || `+91 ${doctor.phone}`}
@@ -91,15 +113,24 @@ const DoctorDetailModal = ({ doctorId, onClose }) => {
 						<DetailRow label="Reg. Number" value={doctor.regNumber || '—'} />
 						<DetailRow label="Hospital" value={doctor.hospital || '—'} />
 						<DetailRow label="Experience" value={doctor.experience != null ? `${doctor.experience} yrs` : '—'} />
+						<DetailRow label="Category" value={CATEGORY_LABELS[doctor.category] || doctor.category || '—'} />
 						<DetailRow icon={<Star size={13} />} label="Rating" value={doctor.rating || 0} />
 						<DetailRow label="Bio" value={doctor.bio || '—'} />
+						<DetailRow label="Joined" value={formatDateTime(doctor.createdAt)} />
 					</DetailSection>
 
 					{/* Fees & availability */}
 					<DetailSection label="Consultation">
 						<DetailRow label="Video Fee" value={`₹${doctor.videoFee ?? 0}`} />
+						<DetailRow label="Audio Fee" value={`₹${doctor.audioFee ?? 0}`} />
 						<DetailRow label="Chat Fee" value={`₹${doctor.chatFee ?? 0}`} />
 						<DetailRow label="Currently Online" value={doctor.available ? 'Yes' : 'No'} />
+					</DetailSection>
+
+					{/* Payout */}
+					<DetailSection label="Payout">
+						<DetailRow icon={<Wallet size={13} />} label="Payout Status" value={<Badge status={doctor.payoutStatus} />} />
+						<DetailRow icon={<BadgeCheck size={13} />} label="Terms Accepted" value={doctor.hasAcceptedTerms ? `Yes (${formatDateTime(doctor.termsAcceptedAt)})` : 'No'} />
 					</DetailSection>
 
 					{/* Schedule */}
@@ -124,10 +155,17 @@ const DoctorDetailModal = ({ doctorId, onClose }) => {
 						<DetailRow label="Max Patients" value={doctor.schedule?.maxPatients ?? '—'} />
 					</DetailSection>
 
-					{/* Documents */}
+					{/* Documents — includes the doctor's signature (shown on prescriptions,
+					    see Backend/models/Doctor.js) alongside the two verification docs.
+					    NOTE: these are Cloudinary URLs uploaded as resource_type "auto" —
+					    if "View" doesn't open the file, check the Cloudinary dashboard
+					    under Settings → Security → "Allow delivery of PDF and ZIP files".
+					    Cloudinary blocks that delivery by default on newer accounts,
+					    independent of anything in this admin panel's code. */}
 					<DetailSection label="Verification Documents">
 						<DocLink label="Medical License" doc={doctor.documents?.medicalLicense} />
 						<DocLink label="ID Proof" doc={doctor.documents?.idProof} />
+						<DocLink label="Signature" doc={doctor.signatureUrl ? { url: doctor.signatureUrl } : null} />
 					</DetailSection>
 
 					{/* Review trail */}

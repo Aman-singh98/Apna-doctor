@@ -109,3 +109,108 @@ body,
 	box-shadow: var(--shadow-card);
 	border: 1px solid var(--border-default);
 }
+/* ─── Responsive: Mobile-First Breakpoints ──────────────────────────────────────
+   Layout uses inline styles almost everywhere, so the JS-driven pieces
+   (sidebar drawer, hamburger) are toggled via className, and pure CSS
+   overrides below win with !important where they need to beat an inline
+   style set on desktop. Breakpoints: <=900px = tablet/mobile nav switch,
+   <=640px = small phone tweaks.
+──────────────────────────────────────────────────────────────────────────── */
+
+/* Sidebar becomes an off-canvas drawer below 900px */
+.admin-sidebar {
+	transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+@media (max-width: 900px) {
+	.admin-sidebar {
+		transform: translateX(-100%);
+		box-shadow: none;
+		z-index: 200 !important;
+	}
+	.admin-sidebar.is-open {
+		transform: translateX(0);
+		box-shadow: 12px 0 32px rgba(15, 23, 42, 0.22);
+	}
+
+	.admin-main-col {
+		margin-left: 0 !important;
+	}
+
+	.admin-topbar {
+		left: 0 !important;
+		padding: 0 14px !important;
+		gap: 10px !important;
+	}
+
+	.admin-main-content {
+		padding: 16px !important;
+	}
+
+	.sidebar-hamburger {
+		display: inline-flex !important;
+	}
+
+	.dashboard-secondary-grid {
+		grid-template-columns: 1fr !important;
+	}
+
+	.login-page-container {
+		flex-direction: column !important;
+		height: auto !important;
+		min-height: 100vh;
+	}
+	.login-brand-panel {
+		flex: 0 0 auto !important;
+		padding: 28px 24px !important;
+	}
+	.login-brand-stats {
+		display: none !important;
+	}
+	.login-form-panel {
+		flex: 1 1 auto !important;
+		padding: 32px 20px !important;
+	}
+	.login-brand-panel h1 {
+		font-size: 24px !important;
+	}
+	.login-brand-panel p {
+		font-size: 13px !important;
+	}
+}
+
+/* Backdrop shown behind the drawer on mobile */
+.sidebar-backdrop {
+	display: none;
+}
+@media (max-width: 900px) {
+	.sidebar-backdrop.is-visible {
+		display: block;
+		position: fixed;
+		inset: 0;
+		background: rgba(15, 23, 42, 0.45);
+		z-index: 150;
+	}
+}
+
+/* Hide the topbar search box on very small phones to avoid crowding —
+   it's still reachable on the per-page search inputs. */
+@media (max-width: 480px) {
+	.topbar-search-box {
+		display: none !important;
+	}
+	.modal-overlay {
+		padding: 12px !important;
+	}
+}
+
+/* Generic small-screen helpers usable from any component */
+@media (max-width: 640px) {
+	.stack-on-mobile {
+		flex-direction: column !important;
+		align-items: stretch !important;
+	}
+	.wrap-on-mobile {
+		flex-wrap: wrap !important;
+	}
+}

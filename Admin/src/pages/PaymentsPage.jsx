@@ -20,6 +20,7 @@ import FilterTabs from '../components/common/FilterTabs';
 import SearchInput from '../components/common/SearchInput';
 import Pagination from '../components/common/Pagination';
 import RefundPaymentModal from '../components/payments/RefundPaymentModal';
+import InvoiceModal from '../components/payments/InvoiceModal';
 import { getPaymentColumns } from '../components/payments/paymentColumns';
 import usePayments from '../hooks/usePayments';
 import { formatCurrency } from '../utils/formatters';
@@ -33,6 +34,8 @@ const PaymentsPage = () => {
 
 	// { _id, patientName, amount }
 	const [refundTarget, setRefundTarget] = useState(null);
+	// payment _id currently shown in the invoice modal
+	const [invoiceId, setInvoiceId] = useState(null);
 
 	const {
 		payments, total, pages, stats, fetchLoading, actionLoading, refundPayment,
@@ -54,6 +57,7 @@ const PaymentsPage = () => {
 	const columns = useMemo(() => getPaymentColumns({
 		actionLoadingId: actionLoading,
 		onRefund: (row) => setRefundTarget({ _id: row._id, patientName: row.patientName || 'this patient', amount: formatCurrency(row.amount) }),
+		onViewInvoice: (row) => setInvoiceId(row._id),
 	}), [actionLoading]);
 
 	return (
@@ -113,7 +117,7 @@ const PaymentsPage = () => {
 			</motion.div>
 
 			{/* ── Footer: count + pagination ─────────────────────────────────── */}
-			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+			<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
 				<p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
 					Showing {payments.length} of {total} transactions
 				</p>
@@ -130,6 +134,13 @@ const PaymentsPage = () => {
 						loading={actionLoading === refundTarget._id}
 						onClose={() => setRefundTarget(null)}
 						onConfirm={handleConfirmRefund}
+					/>
+				)}
+				{invoiceId && (
+					<InvoiceModal
+						key="invoice-modal"
+						paymentId={invoiceId}
+						onClose={() => setInvoiceId(null)}
 					/>
 				)}
 			</AnimatePresence>

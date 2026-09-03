@@ -12,7 +12,7 @@ export const MODAL_STYLES = {
 	card: {
 		background: 'var(--bg-card)', borderRadius: 'var(--radius-md)',
 		boxShadow: '0 20px 60px rgba(0,0,0,0.25)', padding: '28px 28px 24px',
-		width: 420, position: 'relative',
+		width: '100%', maxWidth: 420, boxSizing: 'border-box', position: 'relative',
 	},
 	closeBtn: {
 		position: 'absolute', top: 16, right: 16, background: 'none', border: 'none',

@@ -3,7 +3,7 @@
 // ModalShell + DetailSection/DetailRow building blocks.
 
 import { useEffect, useState } from 'react';
-import { Loader2, Phone, Mail, User, Cake, Droplet, Weight, Calendar, ShieldCheck, Trash2 } from 'lucide-react';
+import { Loader2, Phone, Mail, User, Cake, Droplet, Weight, Calendar, ShieldCheck, Trash2, Clock } from 'lucide-react';
 import ModalShell from '../common/ModalShell';
 import { DetailSection, DetailRow } from '../common/DetailDisplay';
 import { MODAL_STYLES } from '../common/modalStyles';
@@ -54,9 +54,33 @@ const PatientDetailModal = ({ patientId, onClose }) => {
          ) : patient ? (
             <>
                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, paddingRight: 24 }}>
-                  <div>
-                     <h3 style={{ ...MODAL_STYLES.title, marginBottom: 2 }}>{patient.name || 'Unnamed Patient'}</h3>
-                     <p style={{ ...MODAL_STYLES.subtitle, marginBottom: 0 }}>{patient.phone}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                     {patient.photo?.url ? (
+                        <a
+                           href={patient.photo.url}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="Open full-size photo"
+                           style={{
+                              width: 54, height: 54, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                              border: '2px solid var(--blue-tint)', display: 'block',
+                           }}
+                        >
+                           <img src={patient.photo.url} alt={patient.name || 'Patient'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        </a>
+                     ) : (
+                        <div style={{
+                           width: 54, height: 54, borderRadius: '50%', background: 'var(--blue-tint)',
+                           display: 'flex', alignItems: 'center', justifyContent: 'center',
+                           fontSize: 18, fontWeight: 700, color: 'var(--blue-primary)', flexShrink: 0,
+                        }}>
+                           {(patient.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                     )}
+                     <div>
+                        <h3 style={{ ...MODAL_STYLES.title, marginBottom: 2 }}>{patient.name || 'Unnamed Patient'}</h3>
+                        <p style={{ ...MODAL_STYLES.subtitle, marginBottom: 0 }}>{patient.phone}</p>
+                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
                      <Badge status={patient.status} />
@@ -83,6 +107,7 @@ const PatientDetailModal = ({ patientId, onClose }) => {
 
                <DetailSection label="Account">
                   <DetailRow icon={<Calendar size={13} />} label="Registered" value={formatDate(patient.createdAt)} />
+                  <DetailRow icon={<Clock size={13} />} label="Last Updated" value={formatDate(patient.updatedAt)} />
                   <DetailRow icon={<ShieldCheck size={13} />} label="Terms Accepted" value={patient.hasAcceptedTerms ? 'Yes' : 'No'} />
                   <DetailRow label="Profile Complete" value={patient.hasCompletedProfile ? 'Yes' : 'No'} />
                </DetailSection>
