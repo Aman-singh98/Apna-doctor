@@ -100,7 +100,14 @@ export default function DoctorProfileScreen() {
       {
          section: 'Preferences',
          items: [
-            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen' },
+            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen?role=doctor' },
+         ],
+      },
+      {
+         section: 'Legal',
+         items: [
+            { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/doctor/privacy-policy' },
+            { label: 'Terms of Service', icon: 'document-text-outline', route: '/doctor/terms-of-service' },
          ],
       },
    ];

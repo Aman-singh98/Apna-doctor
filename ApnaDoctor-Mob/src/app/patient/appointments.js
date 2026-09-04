@@ -1,10 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
    ActivityIndicator,
    Alert,
+   KeyboardAvoidingView,
    Modal,
+   Platform,
    ScrollView,
    StatusBar,
    StyleSheet,
@@ -20,6 +22,7 @@ import {
    getAppointments as apiGetAppointments,
    rescheduleAppointment as apiRescheduleAppointment,
 } from '../../services/patientAppointmentService';
+import { getAvailability } from '../../services/patientDoctorService';
 import {
    addReview as apiAddReview,
    updateReview as apiUpdateReview,
@@ -30,6 +33,65 @@ import {
 const TEAL = '#1A7E8A';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function pad2(n) {
+   return String(n).padStart(2, '0');
+}
+
+// Builds the next `n` days starting today, in the shape the reschedule
+// date strip needs — same approach as book-appointment.js's date strip,
+// so rescheduling picks from the doctor's REAL upcoming availability
+// instead of 3 hardcoded dates.
+function buildNextDates(n = 7) {
+   const today = new Date();
+   const days = [];
+   for (let i = 0; i < n; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      days.push({
+         label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : '',
+         date: DAY_NAMES[d.getDay()],
+         num: d.getDate(),
+         iso: `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`,
+      });
+   }
+   return days;
+}
+
+// Buckets a time-string slot ("09:00 AM") into Morning/Afternoon/Evening,
+// same grouping book-appointment.js uses for its slot grid.
+function periodOf(slot) {
+   const match = slot.match(/^(\d+):\d+\s*(AM|PM)$/i);
+   if (!match) return 'Morning';
+   let hour = parseInt(match[1], 10);
+   if (match[2].toUpperCase() === 'PM' && hour !== 12) hour += 12;
+   if (match[2].toUpperCase() === 'AM' && hour === 12) hour = 0;
+   if (hour < 12) return 'Morning';
+   if (hour < 16) return 'Afternoon';
+   return 'Evening';
+}
+
+function groupSlotsByPeriod(slots) {
+   const grouped = { Morning: [], Afternoon: [], Evening: [] };
+   slots.forEach(s => grouped[periodOf(s)].push(s));
+   return grouped;
+}
+
+// Combines a date-strip entry's ISO date with a "4:00 PM"-style slot string
+// into a real ISO datetime for the API.
+function combineDateAndSlot(iso, slot) {
+   if (!slot) return null;
+   const [year, month, day] = iso.split('-').map(Number);
+   const match = slot.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
+   if (!match) return null;
+   let hour = parseInt(match[1], 10);
+   const minute = parseInt(match[2], 10);
+   if (match[3].toUpperCase() === 'PM' && hour !== 12) hour += 12;
+   if (match[3].toUpperCase() === 'AM' && hour === 12) hour = 0;
+   const d = new Date(year, month - 1, day, hour, minute);
+   return isNaN(d.getTime()) ? null : d.toISOString();
+}
 
 // Formats an ISO date string into the friendly labels the UI already used,
 // e.g. "Today, 3:00 PM" / "Tomorrow, 11:00 AM" / "12 Jun 2026, 6:30 PM"
@@ -52,29 +114,12 @@ function formatApptDate(isoDate) {
    return `${String(d.getDate()).padStart(2, '0')} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${timeTxt}`;
 }
 
-// Combines the reschedule modal's picker strings ("22 Jun 2026", "4:00 PM")
-// into a real Date, and returns it as an ISO string for the API.
-function buildIsoDateTime(dateStr, timeStr) {
-   const [day, monName, year] = dateStr.split(' ');
-   const monthIndex = MONTHS.indexOf(monName);
-
-   const match = timeStr.match(/^(\d+):(\d+)\s*(AM|PM)$/i);
-   if (!match) return null;
-   let [, hourStr, minuteStr, meridiem] = match;
-   let hour = parseInt(hourStr, 10);
-   const minute = parseInt(minuteStr, 10);
-   if (meridiem.toUpperCase() === 'PM' && hour !== 12) hour += 12;
-   if (meridiem.toUpperCase() === 'AM' && hour === 12) hour = 0;
-
-   const d = new Date(parseInt(year, 10), monthIndex, parseInt(day, 10), hour, minute);
-   return isNaN(d.getTime()) ? null : d.toISOString();
-}
-
 // Maps a raw API appointment (doctor populated, real status enum) into the
 // shape this screen renders.
 function mapAppointment(a) {
    return {
       id: a._id,
+      doctorId: a.doctor?._id || null,
       doctor: a.doctor?.name ? `Dr. ${a.doctor.name}` : 'Doctor',
       spec: a.doctor?.specialization || '',
       type: a.type,
@@ -98,9 +143,17 @@ export default function AppointmentsScreen() {
    const [cancelModalVisible, setCancelModalVisible] = useState(false);
    const [cancelReason, setCancelReason] = useState('');
    const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
-   const [newDate, setNewDate] = useState('22 Jun 2026');
-   const [newTime, setNewTime] = useState('4:00 PM');
    const [actionLoading, setActionLoading] = useState(false);
+
+   // Reschedule — real date strip + slots pulled from the doctor's own
+   // schedule/availability, same as book-appointment.js, instead of a
+   // hardcoded 3-date / 4-slot picker.
+   const rescheduleDates = React.useMemo(() => buildNextDates(7), []);
+   const [selectedRDate, setSelectedRDate] = useState(rescheduleDates[0]);
+   const [selectedRSlot, setSelectedRSlot] = useState(null);
+   const [rActiveSlots, setRActiveSlots] = useState([]);
+   const [rBookedSlots, setRBookedSlots] = useState([]);
+   const [rSlotsLoading, setRSlotsLoading] = useState(false);
 
    // Reviews — keyed by appointment id, so each completed card can show
    // "Rate & Review" or "★ Your Review" without a per-card fetch.
@@ -238,11 +291,39 @@ export default function AppointmentsScreen() {
 
    const handleReschedule = (appt) => {
       setSelectedAppt(appt);
+      setSelectedRDate(rescheduleDates[0]);
+      setSelectedRSlot(null);
       setRescheduleModalVisible(true);
    };
 
+   // Fetch the doctor's real availability whenever the reschedule modal is
+   // open and the picked date changes — mirrors the effect in
+   // book-appointment.js so the picker only ever offers slots the doctor
+   // actually works, with already-booked ones shown but disabled.
+   useEffect(() => {
+      if (!rescheduleModalVisible || !selectedAppt?.doctorId || !selectedRDate) return;
+      (async () => {
+         try {
+            setRSlotsLoading(true);
+            const result = await getAvailability(selectedAppt.doctorId, selectedRDate.iso);
+            setRActiveSlots(result.activeSlots || []);
+            setRBookedSlots(result.bookedSlots || []);
+         } catch (err) {
+            Alert.alert('Error', 'Could not load available time slots.');
+            setRActiveSlots([]);
+            setRBookedSlots([]);
+         } finally {
+            setRSlotsLoading(false);
+         }
+      })();
+   }, [rescheduleModalVisible, selectedAppt, selectedRDate]);
+
    const confirmReschedule = async () => {
-      const isoDate = buildIsoDateTime(newDate, newTime);
+      if (!selectedRSlot) {
+         Alert.alert('Select Time', 'Please select a time slot to continue.');
+         return;
+      }
+      const isoDate = combineDateAndSlot(selectedRDate.iso, selectedRSlot);
       if (!isoDate) {
          Alert.alert('Error', 'Please choose a valid date and time.');
          return;
@@ -252,7 +333,7 @@ export default function AppointmentsScreen() {
          await apiRescheduleAppointment(selectedAppt.id, isoDate);
          await loadAppointments();
          setRescheduleModalVisible(false);
-         Alert.alert('Rescheduled Successfully', `Your appointment is rescheduled to ${newDate} at ${newTime}.`);
+         Alert.alert('Rescheduled Successfully', `Your appointment is rescheduled to ${selectedRDate.date} ${selectedRDate.num}, ${selectedRSlot}.`);
       } catch (err) {
          Alert.alert('Error', err?.response?.data?.message || 'Could not reschedule appointment.');
       } finally {
@@ -488,7 +569,9 @@ export default function AppointmentsScreen() {
             </View>
          </Modal>
 
-         {/* Reschedule Modal */}
+         {/* Reschedule Modal — date strip + grouped time slots pulled from
+             the doctor's real schedule/availability, same UX pattern as
+             the "Date & Time" step in book-appointment.js. */}
          <Modal
             visible={rescheduleModalVisible}
             transparent={true}
@@ -500,47 +583,91 @@ export default function AppointmentsScreen() {
                   <Text style={styles.modalTitle}>Reschedule Appointment</Text>
                   <Text style={styles.modalSubtitle}>Choose a new date and time slot</Text>
 
-                  <Text style={styles.label}>Select Date</Text>
-                  <View style={styles.pickerRow}>
-                     {['22 Jun 2026', '23 Jun 2026', '24 Jun 2026'].map(d => (
-                        <TouchableOpacity 
-                           key={d} 
-                           style={[styles.dateOpt, newDate === d && styles.dateOptActive]}
-                           onPress={() => setNewDate(d)}
-                        >
-                           <Text style={[styles.dateOptTxt, newDate === d && styles.dateOptTxtActive]}>{d.split(' ')[0]}</Text>
-                           <Text style={[styles.dateOptSub, newDate === d && styles.dateOptSubActive]}>{d.split(' ')[1]}</Text>
-                        </TouchableOpacity>
-                     ))}
-                  </View>
-
-                  <Text style={styles.label}>Select Time Slot</Text>
-                  
+                  {/* Everything between the header and the action buttons scrolls —
+                      a doctor with a full day of slots (Morning/Afternoon/Evening)
+                      easily runs past the sheet's maxHeight, and without this the
+                      content just got clipped with no way to reach the rest of the
+                      slots or the Reschedule button itself. */}
                   <ScrollView
-                     horizontal
-                     showsHorizontalScrollIndicator={false}
-                     contentContainerStyle={styles.pickerRow}
-                     >
-                     {['10:00 AM', '11:30 AM', '3:00 PM', '4:00 PM'].map(t => (
-                  <TouchableOpacity
-                     key={t}
-                     style={[
-                     styles.timeOpt,
-                     newTime === t && styles.timeOptActive,
-                     ]}
-                     onPress={() => setNewTime(t)}
+                     style={styles.modalScrollArea}
+                     contentContainerStyle={styles.modalScrollContent}
+                     showsVerticalScrollIndicator={true}
+                     nestedScrollEnabled={true}
                   >
-                     <Text
-                     style={[
-                        styles.timeOptTxt,
-                        newTime === t && styles.timeOptTxtActive,
-                     ]}
+                     <Text style={styles.label}>Select Date</Text>
+                     <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.dateStripRow}
                      >
-                     {t}
-                     </Text>
-                  </TouchableOpacity>
-               ))}
-               </ScrollView>
+                        {rescheduleDates.map(d => {
+                           const isSel = selectedRDate.iso === d.iso;
+                           return (
+                              <TouchableOpacity
+                                 key={d.iso}
+                                 style={[styles.dateOpt, isSel && styles.dateOptActive]}
+                                 onPress={() => { setSelectedRDate(d); setSelectedRSlot(null); }}
+                              >
+                                 {d.label ? (
+                                    <Text style={[styles.dateOptLabel, isSel && styles.dateOptLabelActive]}>{d.label}</Text>
+                                 ) : (
+                                    <Text style={[styles.dateOptLabel, isSel && styles.dateOptLabelActive]}>{d.date}</Text>
+                                 )}
+                                 <Text style={[styles.dateOptTxt, isSel && styles.dateOptTxtActive]}>{d.num}</Text>
+                              </TouchableOpacity>
+                           );
+                        })}
+                     </ScrollView>
+
+                     <Text style={styles.label}>Select Time Slot</Text>
+
+                     {rSlotsLoading ? (
+                        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                           <ActivityIndicator size="small" color={TEAL} />
+                        </View>
+                     ) : rActiveSlots.length === 0 ? (
+                        <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+                           <Ionicons name="calendar-outline" size={30} color="#ccc" />
+                           <Text style={{ marginTop: 8, color: '#999', fontSize: 13 }}>Doctor isn't available on this day.</Text>
+                        </View>
+                     ) : (
+                        Object.entries(groupSlotsByPeriod(rActiveSlots)).map(([period, slots]) => (
+                           slots.length === 0 ? null : (
+                              <View key={period} style={{ marginBottom: 14 }}>
+                                 <Text style={styles.slotPeriodTxt}>{period}</Text>
+                                 <View style={styles.pickerRow}>
+                                    {slots.map(t => {
+                                       const isSlotBooked = rBookedSlots.includes(t);
+                                       const isSel = selectedRSlot === t;
+                                       return (
+                                          <TouchableOpacity
+                                             key={t}
+                                             style={[
+                                                styles.timeOpt,
+                                                isSlotBooked && styles.timeOptBooked,
+                                                isSel && styles.timeOptActive,
+                                             ]}
+                                             disabled={isSlotBooked}
+                                             onPress={() => setSelectedRSlot(t)}
+                                          >
+                                             <Text
+                                                style={[
+                                                   styles.timeOptTxt,
+                                                   isSlotBooked && styles.timeOptTxtBooked,
+                                                   isSel && styles.timeOptTxtActive,
+                                                ]}
+                                             >
+                                                {t}
+                                             </Text>
+                                          </TouchableOpacity>
+                                       );
+                                    })}
+                                 </View>
+                              </View>
+                           )
+                        ))
+                     )}
+                  </ScrollView>
 
                   <View style={styles.modalBtnRow}>
                      <TouchableOpacity 
@@ -552,7 +679,7 @@ export default function AppointmentsScreen() {
                      <TouchableOpacity 
                         style={[styles.modalBtn, styles.modalBtnConfirm]} 
                         onPress={confirmReschedule}
-                        disabled={actionLoading}
+                        disabled={actionLoading || !selectedRSlot}
                      >
                         <Text style={styles.modalBtnConfirmTxt}>{actionLoading ? 'Saving...' : 'Reschedule'}</Text>
                      </TouchableOpacity>
@@ -568,7 +695,10 @@ export default function AppointmentsScreen() {
             animationType="slide"
             onRequestClose={() => setReviewModalVisible(false)}
          >
-            <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+               style={styles.modalOverlay}
+               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                <SafeAreaView style={styles.modalContent}>
                   <Text style={styles.modalTitle}>
                      {reviewsByAppt[selectedAppt?.id] ? 'Edit Your Review' : 'Rate Your Consultation'}
@@ -616,7 +746,7 @@ export default function AppointmentsScreen() {
                      </TouchableOpacity>
                   </View>
                </SafeAreaView>
-            </View>
+            </KeyboardAvoidingView>
          </Modal>
 
          {/* Bottom Navigation */}
@@ -674,7 +804,14 @@ const styles = StyleSheet.create({
    
    // Modal style
    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
+   // `flexShrink: 1` (not `flex: 1`) — lets this area shrink down to fit
+   // short content (e.g. the "no slots today" empty state) without leaving
+   // a big gap above the buttons, but still caps itself at whatever room is
+   // left inside modalContent's maxHeight so long slot lists scroll instead
+   // of pushing the Discard/Reschedule buttons off-screen.
+   modalScrollArea: { flexShrink: 1 },
+   modalScrollContent: { paddingBottom: 4 },
    modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
    modalSubtitle: { fontSize: 13, color: '#666', marginBottom: 16 },
    reasonRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
@@ -692,15 +829,21 @@ const styles = StyleSheet.create({
 
    // Reschedule picker
    label: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginTop: 12, marginBottom: 8 },
-   pickerRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-   dateOpt: { flex: 1, borderWidth: 1.5, borderColor: '#eee', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fafafa' },
+   pickerRow: { flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' },
+   dateStripRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+   dateOpt: { minWidth: 56, borderWidth: 1.5, borderColor: '#eee', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 10, alignItems: 'center', backgroundColor: '#fafafa' },
    dateOptActive: { borderColor: TEAL, backgroundColor: '#E8F5F7' },
-   dateOptTxt: { fontSize: 15, fontWeight: '700', color: '#333' },
+   dateOptLabel: { fontSize: 11, color: '#777', fontWeight: '600' },
+   dateOptLabelActive: { color: TEAL },
+   dateOptTxt: { fontSize: 15, fontWeight: '700', color: '#333', marginTop: 2 },
    dateOptTxtActive: { color: TEAL },
    dateOptSub: { fontSize: 11, color: '#777', marginTop: 2 },
    dateOptSubActive: { color: TEAL, fontWeight: '500' },
+   slotPeriodTxt: { fontSize: 12, fontWeight: '700', color: '#555', marginBottom: 8 },
    timeOpt: { paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1.5, borderColor: '#eee', borderRadius: 8, backgroundColor: '#fafafa' },
    timeOptActive: { borderColor: TEAL, backgroundColor: '#E8F5F7' },
+   timeOptBooked: { backgroundColor: '#f5f5f5', borderColor: '#eee' },
    timeOptTxt: { fontSize: 13, color: '#333', fontWeight: '500' },
-   timeOptTxtActive: { color: TEAL, fontWeight: 'bold' }
+   timeOptTxtActive: { color: TEAL, fontWeight: 'bold' },
+   timeOptTxtBooked: { color: '#bbb' }
 });

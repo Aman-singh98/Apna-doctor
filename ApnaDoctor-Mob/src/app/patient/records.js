@@ -5,8 +5,10 @@ import { useCallback, useEffect, useState } from 'react';
 import {
    ActivityIndicator,
    Alert,
+   KeyboardAvoidingView,
    Linking,
    Modal,
+   Platform,
    RefreshControl,
    ScrollView,
    StatusBar,
@@ -271,8 +273,12 @@ export default function RecordsScreen() {
             animationType="slide"
             onRequestClose={() => setUploadModalVisible(false)}
          >
-            <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+               style={styles.modalOverlay}
+               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                <SafeAreaView style={styles.modalContent}>
+                  <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                   <Text style={styles.modalTitle}>Add Medical Record</Text>
                   <Text style={styles.modalSubtitle}>Keep your medical history organized in one place</Text>
 
@@ -349,8 +355,9 @@ export default function RecordsScreen() {
                         )}
                      </TouchableOpacity>
                   </View>
+                  </ScrollView>
                </SafeAreaView>
-            </View>
+            </KeyboardAvoidingView>
          </Modal>
 
          {/* Bottom Navigation */}
@@ -387,7 +394,7 @@ const styles = StyleSheet.create({
 
    // Modal styling
    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
    modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
    modalSubtitle: { fontSize: 13, color: '#666', marginBottom: 16 },
    label: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', marginTop: 12, marginBottom: 6 },

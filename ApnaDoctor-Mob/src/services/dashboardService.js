@@ -46,7 +46,7 @@ export async function getSchedule() {
 }
 
 // PUT /doctor/profile/me/schedule
-// body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled, maxPatients }
+// body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled }
 export async function updateSchedule(schedule) {
    const { data } = await api.put('/doctor/profile/me/schedule', schedule);
    return data;

@@ -25,7 +25,7 @@
 //
 // GET    /api/doctors/me/schedule         → availability schedule (schedule.js)
 // PUT    /api/doctors/me/schedule         → replace availability schedule (schedule.js)
-//        body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled, maxPatients }
+//        body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled }
 const express = require('express');
 const {
   getMyProfile,

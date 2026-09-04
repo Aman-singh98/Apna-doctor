@@ -14,7 +14,7 @@
 //   <SettingsScreen role="patient" />
 
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
    ActivityIndicator,
@@ -71,8 +71,14 @@ const ROLE_CONFIG = {
    },
 };
 
-export default function SettingsScreen({ role = 'patient' }) {
+export default function SettingsScreen({ role: roleProp = 'patient' }) {
    const router = useRouter();
+   // This screen doubles as both a route (opened via router.push('/settingsScreen?role=...'))
+   // and a plain component (`<SettingsScreen role="doctor" />`). Prefer the
+   // route param when present so it always reflects which app section
+   // navigated here, falling back to the prop/default otherwise.
+   const { role: roleParam } = useLocalSearchParams();
+   const role = roleParam === 'doctor' || roleParam === 'patient' ? roleParam : roleProp;
    const config = ROLE_CONFIG[role] ?? ROLE_CONFIG.patient;
 
    // ── Notification toggles — built dynamically from config.notificationItems ──
@@ -245,7 +251,7 @@ export default function SettingsScreen({ role = 'patient' }) {
             <View style={styles.groupBg}>
                <TouchableOpacity
                   style={styles.row}
-                  onPress={() => Alert.alert('Privacy Policy', 'Displaying privacy policy.')}
+                  onPress={() => router.push(role === 'doctor' ? '/doctor/privacy-policy' : '/patient/privacy-policy')}
                >
                   <View style={styles.left}>
                      <View style={styles.iconBg}><Ionicons name="document-text-outline" size={18} color={TEAL} /></View>
@@ -255,7 +261,7 @@ export default function SettingsScreen({ role = 'patient' }) {
                </TouchableOpacity>
                <TouchableOpacity
                   style={[styles.row, styles.lastRow]}
-                  onPress={() => Alert.alert('Terms of Service', 'Displaying Terms of Service.')}
+                  onPress={() => router.push(role === 'doctor' ? '/doctor/terms-of-service' : '/patient/terms-of-service')}
                >
                   <View style={styles.left}>
                      <View style={styles.iconBg}><Ionicons name="information-circle-outline" size={18} color={TEAL} /></View>

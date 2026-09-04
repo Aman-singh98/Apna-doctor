@@ -26,9 +26,32 @@ export async function uploadMyPhoto(fileUri) {
       type: 'image/jpeg',
    });
 
-   const { data } = await api.post('/doctor/profile/me/photo', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+   // IMPORTANT: do NOT set 'Content-Type': 'multipart/form-data' manually.
+   // React Native's networking layer auto-generates the multipart
+   // Content-Type header for a FormData body, including the required
+   // `boundary=...` parameter — a manually-set header without a boundary
+   // produces a body multer can't parse. See utils/doctorAuth.js for the
+   // same note on submitDoctorSignup.
+   const { data } = await api.post('/doctor/profile/me/photo', formData);
+   return data;
+}
+
+// POST /doctor/profile/me/signature  (multipart/form-data, field name: "signature")
+// Accepts either a PDF or an image file — a doctor's signature can be
+// uploaded either way at signup (see doctor-signup.js's SIGNATURE_SLOT,
+// which offers "upload a PDF" or "draw it"), so editing it later needs to
+// support the same two shapes rather than assuming it's always an image.
+// `file` is { uri, name, type } — same shape doctor-signup.js already
+// builds for its documents map.
+export async function uploadMySignature(file) {
+   const formData = new FormData();
+   formData.append('signature', {
+      uri: file.uri,
+      name: file.name,
+      type: file.type,
    });
+
+   const { data } = await api.post('/doctor/profile/me/signature', formData);
    return data;
 }
 

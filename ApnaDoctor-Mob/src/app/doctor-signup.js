@@ -470,7 +470,7 @@ export default function DoctorSignupScreen() {
                   <TextInput
                      style={[styles.input, payoutErrors.pan && styles.inputError]}
                      value={pan}
-                     onChangeText={t => { setPan(t.toUpperCase()); clearPayoutError('pan'); }}
+                     onChangeText={t => { setPan(t.toUpperCase().replace(/\s/g, '')); clearPayoutError('pan'); }}
                      placeholder="ABCDE1234F"
                      placeholderTextColor="#bbb"
                      autoCapitalize="characters"
@@ -501,7 +501,7 @@ export default function DoctorSignupScreen() {
                            <TextInput
                               style={[styles.input, styles.inputWithIcon, payoutErrors.bankAccountNumber && styles.inputError]}
                               value={bankAccountNumber}
-                              onChangeText={t => { setBankAccountNumber(t); clearPayoutError('bankAccountNumber'); }}
+                              onChangeText={t => { setBankAccountNumber(t.replace(/\D/g, '')); clearPayoutError('bankAccountNumber'); }}
                               placeholder="9-18 digit account number"
                               placeholderTextColor="#bbb"
                               keyboardType="number-pad"
@@ -522,7 +522,7 @@ export default function DoctorSignupScreen() {
                            <TextInput
                               style={[styles.input, styles.inputWithIcon, payoutErrors.confirmBankAccountNumber && styles.inputError]}
                               value={confirmBankAccountNumber}
-                              onChangeText={t => { setConfirmBankAccountNumber(t); clearPayoutError('confirmBankAccountNumber'); }}
+                              onChangeText={t => { setConfirmBankAccountNumber(t.replace(/\D/g, '')); clearPayoutError('confirmBankAccountNumber'); }}
                               placeholder="Re-enter account number"
                               placeholderTextColor="#bbb"
                               keyboardType="number-pad"
@@ -542,7 +542,7 @@ export default function DoctorSignupScreen() {
                         <TextInput
                            style={[styles.input, { borderBottomWidth: 0 }, payoutErrors.ifscCode && styles.inputError]}
                            value={ifscCode}
-                           onChangeText={t => { setIfscCode(t.toUpperCase()); clearPayoutError('ifscCode'); }}
+                           onChangeText={t => { setIfscCode(t.toUpperCase().replace(/\s/g, '')); clearPayoutError('ifscCode'); }}
                            placeholder="e.g. HDFC0001234"
                            placeholderTextColor="#bbb"
                            autoCapitalize="characters"

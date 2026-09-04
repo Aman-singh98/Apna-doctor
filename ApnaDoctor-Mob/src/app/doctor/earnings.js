@@ -1,6 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
+   ActivityIndicator,
+   Alert,
+   RefreshControl,
    ScrollView,
    StatusBar,
    StyleSheet,
@@ -9,26 +13,82 @@ import {
    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { getEarningsSummary, getTransactions, requestPayout } from '../../services/earningsService';
 
 const TEAL = '#1A7E8A';
 const GREEN = '#1D9E75';
 
-const payouts = [
-   { id: '1', patient: 'Rahul Sharma', type: 'Video', date: '24 Jun', amount: 500, status: 'credited' },
-   { id: '2', patient: 'Priya Mehta', type: 'Audio', date: '22 Jun', amount: 400, status: 'credited' },
-   { id: '3', patient: 'Amit Verma', type: 'Chat', date: '22 Jun', amount: 300, status: 'credited' },
-   { id: '4', patient: 'Sneha Gupta', type: 'Video', date: '18 Jun', amount: 500, status: 'credited' },
-   { id: '5', patient: 'Deepak Yadav', type: 'Video', date: '15 Jun', amount: 500, status: 'pending' },
-   { id: '6', patient: 'Kavya Nair', type: 'Chat', date: '10 Jun', amount: 300, status: 'credited' },
-];
-
 const typeIcon = (t) => t === 'Video' ? 'videocam-outline' : t === 'Audio' ? 'call-outline' : 'chatbubbles-outline';
+
+const formatDate = (isoDate) =>
+   new Date(isoDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+const monthLabel = (isoDate) =>
+   new Date(isoDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+
+// Backend gives back { id, patient, type, date, amount, status } — see
+// controllers/earningsController.js getTransactions. status is
+// 'pending' | 'credited' | 'refunded' ('failed' is filtered out server-side).
+const badgeCopy = (status) => {
+   if (status === 'pending') return 'Pending';
+   if (status === 'refunded') return 'Refunded';
+   return 'Credited';
+};
 
 export default function DoctorEarningsScreen() {
    const router = useRouter();
 
-   const totalEarned = payouts.reduce((sum, p) => sum + (p.status === 'credited' ? p.amount : 0), 0);
-   const pending = payouts.reduce((sum, p) => sum + (p.status === 'pending' ? p.amount : 0), 0);
+   const [summary, setSummary] = useState(null);
+   const [transactions, setTransactions] = useState([]);
+   const [loading, setLoading] = useState(true);
+   const [refreshing, setRefreshing] = useState(false);
+   const [error, setError] = useState('');
+   const [requestingPayout, setRequestingPayout] = useState(false);
+
+   const load = useCallback(async ({ silent } = {}) => {
+      if (!silent) setLoading(true);
+      setError('');
+      try {
+         const [summaryData, txns] = await Promise.all([
+            getEarningsSummary(),
+            getTransactions(),
+         ]);
+         setSummary(summaryData);
+         setTransactions(Array.isArray(txns) ? txns : []);
+      } catch (err) {
+         setError(err.response?.data?.message || 'Could not load your earnings.');
+      } finally {
+         setLoading(false);
+         setRefreshing(false);
+      }
+   }, []);
+
+   useEffect(() => {
+      load();
+   }, [load]);
+
+   const onRefresh = () => {
+      setRefreshing(true);
+      load({ silent: true });
+   };
+
+   const onRequestPayout = async () => {
+      setRequestingPayout(true);
+      try {
+         const res = await requestPayout();
+         Alert.alert('Payouts', res.message || 'Request received.');
+      } catch (err) {
+         Alert.alert('Error', err.response?.data?.message || 'Could not check your payout status.');
+      } finally {
+         setRequestingPayout(false);
+      }
+   };
+
+   const statCards = summary ? [
+      { label: 'Video', count: summary.breakdown?.video?.count || 0, amount: summary.breakdown?.video?.amount || 0, color: '#378ADD', bg: '#E6F1FB', icon: 'videocam' },
+      { label: 'Audio', count: summary.breakdown?.audio?.count || 0, amount: summary.breakdown?.audio?.amount || 0, color: '#F5A623', bg: '#FEF5E7', icon: 'call' },
+      { label: 'Chat', count: summary.breakdown?.chat?.count || 0, amount: summary.breakdown?.chat?.amount || 0, color: GREEN, bg: '#E1F5EE', icon: 'chatbubbles' },
+   ] : [];
 
    return (
       <SafeAreaView style={styles.safe}>
@@ -42,45 +102,61 @@ export default function DoctorEarningsScreen() {
             <View style={{ width: 40 }} />
          </View>
 
-         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+         {loading ? (
+            <View style={styles.emptyView}>
+               <ActivityIndicator size="large" color={TEAL} />
+               <Text style={styles.emptyTxt}>Loading your earnings…</Text>
+            </View>
+         ) : error ? (
+            <View style={styles.emptyView}>
+               <Ionicons name="alert-circle-outline" size={60} color="#ccc" />
+               <Text style={styles.emptyTxt}>{error}</Text>
+               <TouchableOpacity style={styles.retryBtn} onPress={() => load()}>
+                  <Text style={styles.retryBtnTxt}>Retry</Text>
+               </TouchableOpacity>
+            </View>
+         ) : (
+         <ScrollView
+            contentContainerStyle={styles.scroll}
+            showsVerticalScrollIndicator={false}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[TEAL]} tintColor={TEAL} />}
+         >
             {/* Summary Card */}
             <View style={styles.summaryCard}>
                <View style={styles.summaryTop}>
-                  <Text style={styles.summaryLabel}>Total Earned (Jun 2026)</Text>
+                  <Text style={styles.summaryLabel}>
+                     Total Earned {summary?.monthStart ? `(${monthLabel(summary.monthStart)})` : ''}
+                  </Text>
                   <Ionicons name="cash-outline" size={20} color="#fff" />
                </View>
-               <Text style={styles.summaryAmount}>₹{totalEarned.toLocaleString('en-IN')}</Text>
+               <Text style={styles.summaryAmount}>₹{(summary?.totalEarned || 0).toLocaleString('en-IN')}</Text>
                <View style={styles.summaryRow}>
                   <View style={styles.summarySubItem}>
                      <Text style={styles.summarySubLabel}>This week</Text>
-                     <Text style={styles.summarySubValue}>₹1,700</Text>
+                     <Text style={styles.summarySubValue}>₹{(summary?.thisWeek || 0).toLocaleString('en-IN')}</Text>
                   </View>
                   <View style={styles.summaryDivider} />
                   <View style={styles.summarySubItem}>
                      <Text style={styles.summarySubLabel}>Pending</Text>
-                     <Text style={styles.summarySubValuePending}>₹{pending.toLocaleString('en-IN')}</Text>
+                     <Text style={styles.summarySubValuePending}>₹{(summary?.pending || 0).toLocaleString('en-IN')}</Text>
                   </View>
                   <View style={styles.summaryDivider} />
                   <View style={styles.summarySubItem}>
                      <Text style={styles.summarySubLabel}>Consultations</Text>
-                     <Text style={styles.summarySubValue}>{payouts.length}</Text>
+                     <Text style={styles.summarySubValue}>{summary?.consultationCount || 0}</Text>
                   </View>
                </View>
             </View>
 
             {/* Stats Row */}
             <View style={styles.statsRow}>
-               {[
-                  { label: 'Video', count: 4, amount: '₹2,000', color: '#378ADD', bg: '#E6F1FB', icon: 'videocam' },
-                  { label: 'Audio', count: 1, amount: '₹400', color: '#F5A623', bg: '#FEF5E7', icon: 'call' },
-                  { label: 'Chat', count: 2, amount: '₹600', color: GREEN, bg: '#E1F5EE', icon: 'chatbubbles' },
-               ].map(s => (
+               {statCards.map(s => (
                   <View key={s.label} style={styles.statCard}>
                      <View style={[styles.statIconBg, { backgroundColor: s.bg }]}>
                         <Ionicons name={s.icon} size={16} color={s.color} />
                      </View>
                      <Text style={styles.statCount}>{s.count} sessions</Text>
-                     <Text style={styles.statAmount}>{s.amount}</Text>
+                     <Text style={styles.statAmount}>₹{s.amount.toLocaleString('en-IN')}</Text>
                      <Text style={styles.statLabel}>{s.label}</Text>
                   </View>
                ))}
@@ -88,22 +164,27 @@ export default function DoctorEarningsScreen() {
 
             {/* Payout History */}
             <Text style={styles.sectionTitle}>Transaction History</Text>
-            {payouts.map(p => (
+            {transactions.length === 0 ? (
+               <View style={styles.emptyView}>
+                  <Ionicons name="cash-outline" size={60} color="#ccc" />
+                  <Text style={styles.emptyTxt}>No transactions yet</Text>
+               </View>
+            ) : transactions.map(p => (
                <View key={p.id} style={styles.txCard}>
                   <View style={styles.txIconBg}>
                      <Ionicons name={typeIcon(p.type)} size={18} color={TEAL} />
                   </View>
                   <View style={{ flex: 1 }}>
                      <Text style={styles.txName}>{p.patient}</Text>
-                     <Text style={styles.txMeta}>{p.type} · {p.date}</Text>
+                     <Text style={styles.txMeta}>{p.type} · {formatDate(p.date)}</Text>
                   </View>
                   <View style={styles.txRight}>
-                     <Text style={[styles.txAmount, p.status === 'pending' && styles.txAmountPending]}>
-                        +₹{p.amount}
+                     <Text style={[styles.txAmount, p.status !== 'credited' && styles.txAmountPending]}>
+                        {p.status === 'refunded' ? '−' : '+'}₹{p.amount}
                      </Text>
-                     <View style={[styles.txBadge, p.status === 'pending' ? styles.txBadgePending : styles.txBadgeDone]}>
-                        <Text style={[styles.txBadgeTxt, p.status === 'pending' ? styles.txBadgeTxtPending : styles.txBadgeTxtDone]}>
-                           {p.status === 'pending' ? 'Pending' : 'Credited'}
+                     <View style={[styles.txBadge, p.status === 'credited' ? styles.txBadgeDone : styles.txBadgePending]}>
+                        <Text style={[styles.txBadgeTxt, p.status === 'credited' ? styles.txBadgeTxtDone : styles.txBadgeTxtPending]}>
+                           {badgeCopy(p.status)}
                         </Text>
                      </View>
                   </View>
@@ -111,12 +192,17 @@ export default function DoctorEarningsScreen() {
             ))}
 
             {/* Withdraw */}
-            <TouchableOpacity style={styles.withdrawBtn}>
-               <Ionicons name="arrow-up-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
-               <Text style={styles.withdrawBtnTxt}>Request Payout</Text>
+            <TouchableOpacity style={styles.withdrawBtn} onPress={onRequestPayout} disabled={requestingPayout}>
+               {requestingPayout ? (
+                  <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+               ) : (
+                  <Ionicons name="arrow-up-circle-outline" size={20} color="#fff" style={{ marginRight: 8 }} />
+               )}
+               <Text style={styles.withdrawBtnTxt}>Check Payout Status</Text>
             </TouchableOpacity>
             <Text style={styles.withdrawNote}>Payouts are processed within 2–3 business days via bank transfer.</Text>
          </ScrollView>
+         )}
       </SafeAreaView>
    );
 }
@@ -127,6 +213,10 @@ const styles = StyleSheet.create({
    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
    barTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
    scroll: { padding: 16, paddingBottom: 40 },
+   emptyView: { alignItems: 'center', justifyContent: 'center', marginTop: 60 },
+   emptyTxt: { fontSize: 14, color: '#999', marginTop: 12, textAlign: 'center', paddingHorizontal: 24 },
+   retryBtn: { marginTop: 16, backgroundColor: TEAL, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+   retryBtnTxt: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
    summaryCard: { backgroundColor: TEAL, borderRadius: 20, padding: 20, marginBottom: 16, elevation: 4, shadowColor: TEAL, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } },
    summaryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
    summaryLabel: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontWeight: '600' },

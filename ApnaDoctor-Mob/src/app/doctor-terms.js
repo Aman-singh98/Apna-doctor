@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { markTermsAccepted } from '../utils/doctorAuth';
+import { LEGAL_ENTITY, LEGAL_VERSION, DOCTOR_TERMS_SECTIONS } from '../constants/legalContent';
 
 const TEAL = '#1A7E8A';
 
@@ -45,42 +46,40 @@ export default function DoctorTermsScreen() {
          </View>
 
          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <Text style={styles.intro}>
-               Before you can join ApnaDoctor as a verified doctor, please read and accept the
-               following terms. You will only need to do this once.
-            </Text>
+            <View style={styles.docHeader}>
+               <Text style={styles.docTitle}>{LEGAL_ENTITY}</Text>
+               <Text style={styles.docSubtitle}>DOCTOR TERMS & CONDITIONS</Text>
+               <Text style={styles.docMeta}>{LEGAL_VERSION}</Text>
+            </View>
 
-            {[
-               {
-                  title: '1. Professional Verification',
-                  body: 'You confirm that all medical qualifications, registration numbers, and documents submitted during signup are genuine and accurately represent your credentials. ApnaDoctor reserves the right to verify these with the relevant medical council before approving your account.',
-               },
-               {
-                  title: '2. Admin Approval Required',
-                  body: 'Your account will remain in "Pending Review" status until an ApnaDoctor administrator manually verifies and approves your profile. You will not be able to accept consultations until approval is granted.',
-               },
-               {
-                  title: '3. Patient Care Standards',
-                  body: 'You agree to provide consultations, prescriptions, and medical advice in accordance with applicable medical ethics, laws, and professional standards in your jurisdiction.',
-               },
-               {
-                  title: '4. Data & Privacy',
-                  body: 'Patient health information accessed through this app is confidential. You agree not to share, store, or use patient data outside the scope of providing care through ApnaDoctor.',
-               },
-               {
-                  title: '5. Fees & Payouts',
-                  body: 'Consultation fees you set will be charged to patients through the app, and your earnings will be paid out as described in the Earnings section, subject to applicable platform fees.',
-               },
-               {
-                  title: '6. Account Suspension',
-                  body: 'ApnaDoctor may suspend or terminate your account in case of policy violations, patient complaints, or misuse of the platform, after due review.',
-               },
-            ].map((section) => (
+            {DOCTOR_TERMS_SECTIONS.map((section) => (
                <View key={section.title} style={styles.section}>
                   <Text style={styles.sectionTitle}>{section.title}</Text>
                   <Text style={styles.sectionBody}>{section.body}</Text>
                </View>
             ))}
+
+            <View style={styles.declarationBox}>
+               <Text style={styles.declarationTitle}>Mandatory Doctor Declaration & Consent</Text>
+               <Text style={styles.declarationBody}>
+                  I confirm that I have read, understood and agree to these Doctor Terms &
+                  Conditions and all applicable Platform Policies, including the Doctor Privacy
+                  Policy, Telemedicine Consent Policy, Payment, Refund & Cancellation and
+                  Prescription Policies; I confirm that my registration and credentials are valid
+                  and will be kept updated; I agree to comply with applicable laws, NMC and State
+                  Medical Council regulations and Telemedicine Practice Guidelines; I acknowledge
+                  that I am solely responsible for all professional advice, diagnosis, treatment
+                  and prescriptions issued by me; I consent to verification, quality audits and
+                  lawful processing of my professional information by Apna Doctor Healthcare LLP;
+                  I understand that my payout will be created after deduction of the Platform
+                  Service Fee, applicable 18% GST on such fee, payment gateway charges and
+                  applicable TDS; I acknowledge and accept that Apna Doctor Healthcare LLP shall
+                  have the final decision-making authority on all platform-related, operational
+                  and administrative matters, and I agree to accept and abide by such decisions;
+                  and I agree to be legally bound by these Terms by selecting 'I AGREE &
+                  CONTINUE'.
+               </Text>
+            </View>
          </ScrollView>
 
          {/* Checkbox + CTA */}
@@ -94,7 +93,8 @@ export default function DoctorTermsScreen() {
                   {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
                </View>
                <Text style={styles.checkLabel}>
-                  I have read and agree to the Terms & Conditions above
+                  I confirm I have read, understood and agree to the Doctor Terms & Conditions
+                  and the Mandatory Declaration & Consent above
                </Text>
             </TouchableOpacity>
 
@@ -105,7 +105,7 @@ export default function DoctorTermsScreen() {
                activeOpacity={0.85}
             >
                <Text style={styles.continueBtnTxt}>
-                  {saving ? 'Please wait...' : 'Accept & Continue'}
+                  {saving ? 'Please wait...' : 'I AGREE & CONTINUE'}
                </Text>
                <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
@@ -120,10 +120,16 @@ const styles = StyleSheet.create({
    logoImg: { width: 34, height: 34, borderRadius: 10 },
    barTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
    scroll: { padding: 16, paddingBottom: 24 },
-   intro: { fontSize: 13, color: '#555', lineHeight: 20, marginBottom: 16 },
+   docHeader: { alignItems: 'center', marginBottom: 16 },
+   docTitle: { fontSize: 12, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+   docSubtitle: { fontSize: 17, fontWeight: '800', color: '#1a1a1a', marginTop: 4, textAlign: 'center' },
+   docMeta: { fontSize: 11.5, color: '#999', marginTop: 4 },
    section: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#f0f0f0' },
    sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 6 },
    sectionBody: { fontSize: 13, color: '#666', lineHeight: 19 },
+   declarationBox: { backgroundColor: '#eef7f8', borderRadius: 14, padding: 14, marginTop: 6, borderWidth: 1, borderColor: '#cfe9ec' },
+   declarationTitle: { fontSize: 13.5, fontWeight: '700', color: TEAL, marginBottom: 6 },
+   declarationBody: { fontSize: 12.5, color: '#3a4b4d', lineHeight: 19 },
    footer: { padding: 16, paddingTop: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
    checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
    checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#ccc', alignItems: 'center', justifyContent: 'center', marginTop: 1 },

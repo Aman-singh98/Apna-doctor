@@ -52,7 +52,9 @@ const doctorSchema = new mongoose.Schema(
 
 		schedule: {
 			// Defaults below match the "fresh doctor" experience in the app —
-			// Mon-Fri, 4 standard slots/day, video+chat on, audio off, cap 12/day.
+			// Mon-Fri, 4 standard slots/day, video+chat on, audio off.
+			// There is no cap on patients per day: a doctor can be booked for
+			// as many appointments as they have open (unbooked) slots for.
 			activeDays: {
 				type: [{ type: String }],
 				default: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
@@ -64,6 +66,8 @@ const doctorSchema = new mongoose.Schema(
 			videoEnabled: { type: Boolean, default: true },
 			audioEnabled: { type: Boolean, default: true },
 			chatEnabled: { type: Boolean, default: true },
+			// Deprecated: kept only so old documents that still have this
+			// field don't fail to load. No longer read or written anywhere.
 			maxPatients: { type: Number, default: 12 },
 		},
 

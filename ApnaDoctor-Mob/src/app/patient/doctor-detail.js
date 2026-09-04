@@ -4,6 +4,7 @@ import {
    TouchableOpacity, Image, StatusBar, Alert, ActivityIndicator
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getDoctorReviews } from '../../services/reviewService';
 import { getDoctorById } from '../../services/patientDoctorService';
@@ -25,6 +26,7 @@ function formatActiveDays(days) {
 export default function DoctorDetailScreen() {
    const router = useRouter();
    const params = useLocalSearchParams();
+   const insets = useSafeAreaInsets();
 
    // Route params from doctor-list.js are shown instantly so the screen
    // never renders blank; they're replaced by the authoritative record
@@ -40,10 +42,25 @@ export default function DoctorDetailScreen() {
    const hospital = doctor?.hospital || null;
    const experienceYrs = doctor?.experience != null ? doctor.experience : null;
    const videoFee = doctor?.videoFee != null ? doctor.videoFee : (params.fee ? Number(params.fee) : 0);
+   const audioFee = doctor?.audioFee != null ? doctor.audioFee : videoFee;
    const chatFee = doctor?.chatFee != null ? doctor.chatFee : videoFee;
    const isAvailable = doctor?.available !== false; // default true until loaded
    const activeDaysLabel = formatActiveDays(doctor?.schedule?.activeDays);
    const activeSlots = doctor?.schedule?.activeSlots || [];
+
+   // Which consult modes this doctor actually offers — mirrors the
+   // CONSULT_MODES gating in book-appointment.js. Default to true only
+   // while the full profile hasn't loaded yet, so the card doesn't flash
+   // "no modes available" before the real schedule arrives.
+   const videoEnabled = doctor ? doctor.schedule?.videoEnabled !== false : true;
+   const audioEnabled = doctor ? doctor.schedule?.audioEnabled !== false : false;
+   const chatEnabled = doctor ? doctor.schedule?.chatEnabled !== false : true;
+
+   const consultModes = [
+      { key: 'video', enabled: videoEnabled, icon: 'videocam-outline', label: 'Video Consult', fee: videoFee },
+      { key: 'audio', enabled: audioEnabled, icon: 'call-outline', label: 'Audio Consult', fee: audioFee },
+      { key: 'chat', enabled: chatEnabled, icon: 'chatbubble-outline', label: 'Chat Consult', fee: chatFee },
+   ].filter(m => m.enabled);
 
    const [bookmarked, setBookmarked] = useState(false);
    const [showAllBio, setShowAllBio] = useState(false);
@@ -114,7 +131,7 @@ export default function DoctorDetailScreen() {
             </TouchableOpacity>
          </View>
 
-         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+         <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
             {/* Doctor Header Card */}
             <View style={styles.headerCard}>
                <View style={styles.avatarContainer}>
@@ -178,34 +195,30 @@ export default function DoctorDetailScreen() {
                ))}
             </View>
 
-            {/* Fees Card — video and chat priced separately per doctor.videoFee /
-                doctor.chatFee, same source book-appointment.js uses. */}
+            {/* Fees Card — only shows the consult modes this doctor actually
+                offers (doctor.schedule.videoEnabled/audioEnabled/chatEnabled),
+                same gating book-appointment.js uses, instead of always
+                rendering Video + Chat regardless of the doctor's settings. */}
             <View style={styles.sectionCard}>
                <Text style={styles.sectionTitle}>Consultation Fees</Text>
-               <View style={styles.feeRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                     <View style={styles.feeIconBg}>
-                        <Ionicons name="videocam-outline" size={20} color="#085041" />
+               {consultModes.length === 0 ? (
+                  <Text style={styles.emptyReviewsTxt}>This doctor hasn't enabled any consult modes yet.</Text>
+               ) : (
+                  consultModes.map((mode, idx) => (
+                     <View key={mode.key} style={[styles.feeRow, idx > 0 && { marginTop: 12 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                           <View style={styles.feeIconBg}>
+                              <Ionicons name={mode.icon} size={20} color="#085041" />
+                           </View>
+                           <View style={{ marginLeft: 12 }}>
+                              <Text style={styles.feeLabel}>{mode.label}</Text>
+                              <Text style={styles.feeSub}>Includes prescription & 3 days follow-up</Text>
+                           </View>
+                        </View>
+                        <Text style={styles.feeAmt}>₹{mode.fee}</Text>
                      </View>
-                     <View style={{ marginLeft: 12 }}>
-                        <Text style={styles.feeLabel}>Video Consult</Text>
-                        <Text style={styles.feeSub}>Includes prescription & 3 days follow-up</Text>
-                     </View>
-                  </View>
-                  <Text style={styles.feeAmt}>₹{videoFee}</Text>
-               </View>
-               <View style={[styles.feeRow, { marginTop: 12 }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                     <View style={styles.feeIconBg}>
-                        <Ionicons name="chatbubble-outline" size={20} color="#085041" />
-                     </View>
-                     <View style={{ marginLeft: 12 }}>
-                        <Text style={styles.feeLabel}>Chat Consult</Text>
-                        <Text style={styles.feeSub}>Includes prescription & 3 days follow-up</Text>
-                     </View>
-                  </View>
-                  <Text style={styles.feeAmt}>₹{chatFee}</Text>
-               </View>
+                  ))
+               )}
             </View>
 
             {/* About Doctor Section */}
@@ -278,15 +291,20 @@ export default function DoctorDetailScreen() {
 
          </ScrollView>
 
-         {/* Bottom Action Bar */}
-         <View style={styles.bottomBar}>
-            <TouchableOpacity
-               style={styles.chatBtn}
-               onPress={() => router.push({ pathname: '/patient/consultation-chat', params: { docId, docName, spec } })}
-            >
-               <Ionicons name="chatbubble-ellipses-outline" size={20} color={TEAL} style={{ marginRight: 6 }} />
-               <Text style={styles.chatBtnTxt}>Chat Now</Text>
-            </TouchableOpacity>
+         {/* Bottom Action Bar — padded for the device's safe-area/gesture
+             bar (same pattern as PatientBottomNav.js and book-appointment.js)
+             so "Book Appointment" doesn't sit flush behind the phone's
+             on-screen nav buttons. */}
+         <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+            {chatEnabled && (
+               <TouchableOpacity
+                  style={styles.chatBtn}
+                  onPress={() => router.push({ pathname: '/patient/consultation-chat', params: { docId, docName, spec } })}
+               >
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={TEAL} style={{ marginRight: 6 }} />
+                  <Text style={styles.chatBtnTxt}>Chat Now</Text>
+               </TouchableOpacity>
+            )}
 
             <TouchableOpacity
                style={styles.bookBtnSubmit}

@@ -65,6 +65,7 @@ const emergencyContactsRoutes = require('./routes/emergencyContacts');
 // Patient-facing appointment routes — list/cancel/reschedule the patient's
 // own appointments. Distinct from appointmentRoutes (doctor-facing).
 const patientAppointmentRoutes = require('./routes/patientAppointmentRoutes');
+const patientPaymentRoutes = require('./routes/patientPaymentRoutes');
 
 // Patient-facing doctor browse routes — search/list approved doctors and
 // check slot availability. Distinct from doctorRoutes (admin-only).
@@ -108,6 +109,11 @@ const doctorNotificationRoutes = require('./routes/doctorNotifications');
 
 const consultationRoutes = require('./routes/consultationRoutes');
 const patientConsultationRoutes = require('./routes/patientConsultationRoutes');
+
+// Doctor-facing earnings & payouts (summary card, transaction history,
+// payout-request) — was written but never mounted, so app/doctor/earnings.js
+// had nothing real to call and fell back to hardcoded mock data.
+const earningsRoutes = require('./routes/earningsRoutes');
 
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const chatTokenRoutes = require('./routes/chatTokenRoutes');
@@ -246,6 +252,11 @@ app.use('/api/patient/family-members', familyMembersRoutes);
 // PATCH  /api/patient/appointments/:id/cancel     (requires patient JWT)
 // PATCH  /api/patient/appointments/:id/reschedule (requires patient JWT)
 app.use('/api/patient/appointments', patientAppointmentRoutes);
+// GET  /api/patient/payments                (requires patient JWT)
+// GET  /api/patient/payments/summary         (requires patient JWT)
+// GET  /api/patient/payments/refunds         (requires patient JWT)
+// GET  /api/patient/payments/:id/invoice/pdf (requires patient JWT)
+app.use('/api/patient/payments', patientPaymentRoutes);
 
 // GET /api/patient/doctors                      (requires patient JWT)
 // GET /api/patient/doctors/:id                   (requires patient JWT)
@@ -329,6 +340,8 @@ app.use('/api/admin/notifications', adminNotificationRoutes);
 
 app.use('/api/consultation', consultationRoutes);
 app.use('/api/patient/consultation', patientConsultationRoutes);
+
+app.use('/api/earnings', earningsRoutes);
 
 // ── Razorpay Webhooks ──────────────────────────────────────────────────────────
 // POST /api/webhooks/razorpay  (no auth — verified via HMAC signature instead;

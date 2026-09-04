@@ -247,7 +247,8 @@ const DEFAULT_SCHEDULE = {
    videoEnabled: true,
    audioEnabled: true,
    chatEnabled: true,
-   maxPatients: 12,
+   // No cap on patients per day — a doctor can take as many appointments
+   // as they have open slots for.
 };
 
 const VALID_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -272,10 +273,12 @@ exports.getMySchedule = async (req, res) => {
 };
 
 // PUT /api/doctors/me/schedule
-// body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled, maxPatients }
+// body: { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled }
+// NOTE: there is no daily patient cap — a doctor can be booked for as many
+// appointments as they have open (unbooked) time slots for.
 exports.updateMySchedule = async (req, res) => {
    try {
-      const { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled, maxPatients } = req.body;
+      const { activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled } = req.body;
 
       // ── Validation ────────────────────────────────────────────────────────
       if (!Array.isArray(activeDays) || activeDays.length === 0) {
@@ -290,10 +293,6 @@ exports.updateMySchedule = async (req, res) => {
       if (![videoEnabled, audioEnabled, chatEnabled].some(Boolean)) {
          return res.status(400).json({ message: 'Enable at least one consultation type.' });
       }
-      const maxP = Number(maxPatients);
-      if (!Number.isInteger(maxP) || maxP < 1) {
-         return res.status(400).json({ message: 'maxPatients must be a positive integer.' });
-      }
 
       const doctor = await Doctor.findByIdAndUpdate(
          req.user.id,
@@ -304,7 +303,6 @@ exports.updateMySchedule = async (req, res) => {
                videoEnabled: !!videoEnabled,
                audioEnabled: !!audioEnabled,
                chatEnabled: !!chatEnabled,
-               maxPatients: maxP,
             },
          },
          { new: true, runValidators: true }

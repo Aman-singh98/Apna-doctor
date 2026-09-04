@@ -18,7 +18,36 @@ import { getSchedule, updateSchedule } from '../../services/dashboardService';
 const TEAL = '#1A7E8A';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const SLOTS = ['09:00 AM', '10:00 AM', '11:00 AM', '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM', '05:00 PM'];
+
+// Working hour blocks (24h) the clinic operates in, with a lunch break
+// between 12:00 PM and 1:00 PM. Each block is expanded into 15-minute
+// appointment slots below (e.g. 9:00, 9:15, 9:30, 9:45 ...).
+const WORKING_HOUR_BLOCKS = [
+   { start: 9, end: 12 },  // 09:00 AM – 11:45 AM
+   { start: 13, end: 18 }, // 01:00 PM – 05:45 PM
+];
+const SLOT_INTERVAL_MINUTES = 15;
+
+function formatSlot(hour24, minute) {
+   const period = hour24 >= 12 ? 'PM' : 'AM';
+   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+   return `${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+function buildSlots() {
+   const slots = [];
+   WORKING_HOUR_BLOCKS.forEach(({ start, end }) => {
+      for (let hour = start; hour < end; hour++) {
+         for (let minute = 0; minute < 60; minute += SLOT_INTERVAL_MINUTES) {
+            slots.push(formatSlot(hour, minute));
+         }
+      }
+   });
+   return slots;
+}
+
+// e.g. ['09:00 AM', '09:15 AM', '09:30 AM', '09:45 AM', '10:00 AM', ... , '05:45 PM']
+const SLOTS = buildSlots();
 
 export default function DoctorScheduleScreen() {
    const router = useRouter();
@@ -32,7 +61,6 @@ export default function DoctorScheduleScreen() {
    const [videoEnabled, setVideoEnabled] = useState(true);
    const [audioEnabled, setAudioEnabled] = useState(true);
    const [chatEnabled, setChatEnabled] = useState(true);
-   const [maxPatients, setMaxPatients] = useState(12);
 
    useEffect(() => {
       let isMounted = true;
@@ -45,7 +73,6 @@ export default function DoctorScheduleScreen() {
             setVideoEnabled(schedule.videoEnabled);
             setAudioEnabled(schedule.audioEnabled);
             setChatEnabled(schedule.chatEnabled);
-            setMaxPatients(schedule.maxPatients);
             setIsDefault(fromDefault);
          } catch (err) {
             Alert.alert('Error', 'Could not load your schedule. Please try again.');
@@ -89,7 +116,6 @@ export default function DoctorScheduleScreen() {
             videoEnabled,
             audioEnabled,
             chatEnabled,
-            maxPatients,
          });
          setIsDefault(false);
          Alert.alert('Schedule Saved', 'Your availability schedule has been updated.', [
@@ -185,7 +211,7 @@ export default function DoctorScheduleScreen() {
                   ))}
                </View>
                <Text style={styles.subNote}>
-                  {activeSlots.length} slots active per working day
+                  {activeSlots.length} slots active per working day · 15 min gap between appointments
                </Text>
             </View>
 
@@ -214,39 +240,11 @@ export default function DoctorScheduleScreen() {
                ))}
             </View>
 
-            {/* Max Patients */}
-            <Text style={styles.groupLabel}>Max Patients Per Day</Text>
-            <View style={styles.groupBg}>
-               <View style={styles.counterRow}>
-                  <View style={styles.counterLeft}>
-                     <View style={styles.toggleIconBg}>
-                        <Ionicons name="people-outline" size={18} color={TEAL} />
-                     </View>
-                     <Text style={styles.toggleLabel}>Daily Limit</Text>
-                  </View>
-                  <View style={styles.counterControls}>
-                     <TouchableOpacity
-                        style={styles.counterBtn}
-                        onPress={() => setMaxPatients(prev => Math.max(1, prev - 1))}
-                     >
-                        <Ionicons name="remove" size={18} color={TEAL} />
-                     </TouchableOpacity>
-                     <Text style={styles.counterVal}>{maxPatients}</Text>
-                     <TouchableOpacity
-                        style={styles.counterBtn}
-                        onPress={() => setMaxPatients(prev => prev + 1)}
-                     >
-                        <Ionicons name="add" size={18} color={TEAL} />
-                     </TouchableOpacity>
-                  </View>
-               </View>
-            </View>
-
             {/* Summary */}
             <View style={styles.summaryCard}>
                <Ionicons name="information-circle-outline" size={18} color={TEAL} style={{ marginRight: 8 }} />
                <Text style={styles.summaryTxt}>
-                  You are available {activeDays.length} days a week with {activeSlots.length} slots/day. Max {maxPatients} patients daily.
+                  You are available {activeDays.length} days a week with {activeSlots.length} slots/day (15 min apart). There's no limit on patients per day — every open slot can be booked.
                </Text>
             </View>
 

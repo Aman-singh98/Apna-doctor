@@ -18,7 +18,7 @@ const Appointment = require('../models/Appointment');
 const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const PUBLIC_DOCTOR_FIELDS =
-   'name specialization qualification hospital experience bio photoUrl videoFee chatFee rating schedule available';
+   'name specialization qualification hospital experience bio photoUrl videoFee audioFee chatFee rating schedule available';
 
 // GET /api/patient/doctors?specialization=&search=
 exports.getDoctors = async (req, res) => {

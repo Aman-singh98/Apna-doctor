@@ -284,6 +284,13 @@ async function buildInvoiceData(appointmentId) {
    };
 }
 
+// Reused by controllers/patientPaymentController.js so the patient-facing
+// invoice/receipt is computed by the exact same code as the admin one —
+// same "one place computes the numbers" rule this function's own header
+// comment describes. The patient controller is responsible for its own
+// ownership check (appointment.patient === req.user.id) before calling this.
+exports.buildInvoiceData = buildInvoiceData;
+
 // ── GET /api/admin/payments/:id/invoice ─────────────────────────────────────
 exports.getPaymentInvoice = async (req, res, next) => {
    try {

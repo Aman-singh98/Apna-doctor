@@ -15,11 +15,36 @@
 // instances, swap this for node-cron/agenda + a lock, or a proper scheduled
 // task (e.g. a cron-triggered serverless function), so the sweep doesn't run
 // once per instance.
+//
+// anonymizePatient / anonymizeDoctor below are exported (not just used
+// internally by the sweep) because controllers/adminPatientController.js and
+// controllers/doctorController.js both call them for the admin "finalize
+// deletion now" action (skip the remaining grace period). Keeping exactly
+// one copy of the anonymization logic means the daily sweep and the admin
+// "finalize now" button can never drift out of sync with each other.
 
 const Patient = require('../models/Patient');
 const Doctor = require('../models/Doctor');
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// ── Patient ──────────────────────────────────────────────────────────────────
+
+async function anonymizePatient(patient) {
+   patient.name = 'Deleted User';
+   patient.email = '';
+   patient.phone = `deleted_${patient._id}`; // keeps the unique index happy, unrecoverable
+   patient.dob = '';
+   patient.bloodGroup = '';
+   patient.weight = '';
+   patient.photo = { url: '', publicId: '' };
+   patient.otp = undefined;
+   patient.otpExpiresAt = undefined;
+   patient.accountStatus = 'deleted';
+   patient.deletedAt = new Date();
+   await patient.save();
+   return patient;
+}
 
 async function finalizePatientDeletions() {
    const due = await Patient.find({
@@ -28,24 +53,33 @@ async function finalizePatientDeletions() {
    });
 
    for (const patient of due) {
-      patient.name = 'Deleted User';
-      patient.email = '';
-      patient.phone = `deleted_${patient._id}`; // keeps the unique index happy, unrecoverable
-      patient.dob = '';
-      patient.bloodGroup = '';
-      patient.weight = '';
-      patient.photo = { url: '', publicId: '' };
-      patient.otp = undefined;
-      patient.otpExpiresAt = undefined;
-      patient.accountStatus = 'deleted';
-      patient.deletedAt = new Date();
-      await patient.save();
+      await anonymizePatient(patient);
    }
 
    if (due.length) {
       console.log(`[AccountDeletionJob] Finalized ${due.length} patient deletion(s).`);
    }
    return due.length;
+}
+
+// ── Doctor ───────────────────────────────────────────────────────────────────
+
+async function anonymizeDoctor(doctor) {
+   doctor.name = 'Deleted Doctor';
+   doctor.phone = `deleted_${doctor._id}`;
+   doctor.bio = '';
+   doctor.photoUrl = '';
+   doctor.photoPublicId = '';
+   doctor.fcmToken = undefined;
+   // Deliberately NOT scrubbing qualification/regNumber/documents — that's
+   // the regulatory record of who was licensed to treat patients on the
+   // platform, not personal contact info. Drop this comment + those fields
+   // too if your compliance stance requires full erasure instead.
+   doctor.available = false;
+   doctor.accountStatus = 'deleted';
+   doctor.deletedAt = new Date();
+   await doctor.save();
+   return doctor;
 }
 
 async function finalizeDoctorDeletions() {
@@ -55,20 +89,7 @@ async function finalizeDoctorDeletions() {
    });
 
    for (const doctor of due) {
-      doctor.name = 'Deleted Doctor';
-      doctor.phone = `deleted_${doctor._id}`;
-      doctor.bio = '';
-      doctor.photoUrl = '';
-      doctor.photoPublicId = '';
-      doctor.fcmToken = undefined;
-      // Deliberately NOT scrubbing qualification/regNumber/documents — that's
-      // the regulatory record of who was licensed to treat patients on the
-      // platform, not personal contact info. Drop this comment + those fields
-      // too if your compliance stance requires full erasure instead.
-      doctor.available = false;
-      doctor.accountStatus = 'deleted';
-      doctor.deletedAt = new Date();
-      await doctor.save();
+      await anonymizeDoctor(doctor);
    }
 
    if (due.length) {
@@ -91,4 +112,9 @@ function startAccountDeletionJob() {
    setInterval(runSweep, ONE_DAY_MS);
 }
 
-module.exports = { startAccountDeletionJob, runSweep };
+module.exports = {
+   startAccountDeletionJob,
+   runSweep,
+   anonymizePatient,
+   anonymizeDoctor,
+};

@@ -749,7 +749,10 @@ export default function PrescriptionWriteScreen() {
             animationType="slide"
             onRequestClose={() => setPatientPickerVisible(false)}
          >
-            <View style={styles.previewOverlay}>
+            <KeyboardAvoidingView
+               style={styles.previewOverlay}
+               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                <SafeAreaView edges={['bottom']} style={[styles.previewSheet, { maxHeight: '80%' }]}>
                   <View style={styles.modalHandle} />
                   <Text style={styles.previewTitle}>Select Patient</Text>
@@ -818,7 +821,7 @@ export default function PrescriptionWriteScreen() {
                      <Text style={styles.closePrevTxt}>Close</Text>
                   </TouchableOpacity>
                </SafeAreaView>
-            </View>
+            </KeyboardAvoidingView>
          </Modal>
       </SafeAreaView>
    );

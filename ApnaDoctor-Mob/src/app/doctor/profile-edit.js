@@ -1,4 +1,5 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -7,6 +8,7 @@ import {
    Alert,
    Image,
    KeyboardAvoidingView,
+   Linking,
    Platform,
    ScrollView,
    StatusBar,
@@ -20,6 +22,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { getMyProfile, updateMyProfile, uploadMyPhoto, uploadMySignature, getMyPayoutInfo } from '../../services/profileService';
 import { submitPayoutKyc } from '../../utils/doctorAuth';
 import { BUSINESS_TYPES, validatePayoutKyc } from '../../utils/payoutValidators';
+import { dataUrlToFileUri } from '../../utils/imageUtils';
+import SignaturePadModal from '../../components/SignaturePadModal';
 import {
    DOCTOR_CATEGORIES,
    SPECIALIZATIONS_BY_CATEGORY,
@@ -46,6 +50,7 @@ export default function DoctorProfileEditScreen() {
    const [selectedSpec, setSelectedSpec] = useState('');
    const [photoUrl, setPhotoUrl] = useState(null);
    const [signatureUrl, setSignatureUrl] = useState(null);
+   const [signaturePadVisible, setSignaturePadVisible] = useState(false);
 
    // ── Account & Payout Details ────────────────────────────────────────────
    // Loaded separately from the main profile (getMyPayoutInfo only ever
@@ -164,28 +169,40 @@ export default function DoctorProfileEditScreen() {
    };
 
    const handleChangeSignature = async () => {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-         return Alert.alert(
-            'Permission needed',
-            'Please allow photo library access to add your signature.'
-         );
+      try {
+         const result = await DocumentPicker.getDocumentAsync({
+            type: ['application/pdf'],
+            copyToCacheDirectory: true,
+         });
+
+         // Expo SDK 49+: result.canceled instead of result.type === 'cancel'
+         if (result.canceled) return;
+
+         const file = result.assets[0];
+         await saveSignatureFile({ uri: file.uri, name: file.name, type: 'application/pdf' });
+      } catch (err) {
+         Alert.alert('Error', 'Could not pick document. Please try again.');
       }
+   };
 
-      // Wide aspect ratio suits a signature better than a square crop.
-      const result = await ImagePicker.launchImageLibraryAsync({
-         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-         allowsEditing: true,
-         aspect: [3, 1],
-         quality: 0.8,
-      });
+   const handleDrawnSignatureSave = async (dataUrl) => {
+      setSignaturePadVisible(false);
+      try {
+         const fileUri = await dataUrlToFileUri(dataUrl);
+         await saveSignatureFile({ uri: fileUri, name: 'signature.png', type: 'image/png' });
+      } catch (err) {
+         Alert.alert('Error', 'Could not save your drawn signature. Please try again.');
+      }
+   };
 
-      if (result.canceled) return;
-
-      const uri = result.assets[0].uri;
+   // Shared upload step for both signature paths above — a signature can be
+   // either a PDF (uploaded from files) or a PNG (drawn on the pad), same as
+   // the signature slot in doctor-signup.js, so both funnel through the same
+   // uploadMySignature call rather than assuming one fixed file type.
+   const saveSignatureFile = async (file) => {
       setUploadingSignature(true);
       try {
-         const updated = await uploadMySignature(uri);
+         const updated = await uploadMySignature(file);
          setSignatureUrl(updated.signatureUrl);
       } catch (err) {
          Alert.alert(
@@ -195,6 +212,17 @@ export default function DoctorProfileEditScreen() {
       } finally {
          setUploadingSignature(false);
       }
+   };
+
+   // A signature URL can be a PDF (file upload) or PNG (drawn) — decide how
+   // to render/open it based on the extension rather than assuming an image.
+   const signatureIsPdf = !!signatureUrl && signatureUrl.toLowerCase().split('?')[0].endsWith('.pdf');
+
+   const handleViewSignature = () => {
+      if (!signatureUrl) return;
+      Linking.openURL(signatureUrl).catch(() => {
+         Alert.alert('Error', 'Could not open the signature file.');
+      });
    };
 
    const handleCategorySelect = (catKey) => {
@@ -409,18 +437,37 @@ export default function DoctorProfileEditScreen() {
                <Text style={styles.groupLabel}>Signature</Text>
                <View style={styles.groupBg}>
                   <Text style={styles.helperTxt}>Appears on prescriptions you issue to patients.</Text>
-                  <View style={styles.signatureBox}>
-                     {uploadingSignature ? (
+
+                  {uploadingSignature ? (
+                     <View style={styles.signatureBox}>
                         <ActivityIndicator size="small" color={TEAL} />
-                     ) : signatureUrl ? (
-                        <Image source={{ uri: signatureUrl }} style={styles.signatureImg} resizeMode="contain" />
+                     </View>
+                  ) : signatureUrl ? (
+                     signatureIsPdf ? (
+                        <TouchableOpacity style={styles.docCard} onPress={handleViewSignature} activeOpacity={0.85}>
+                           <View style={styles.docIconBg}>
+                              <MaterialCommunityIcons name="file-pdf-box" size={20} color={TEAL} />
+                           </View>
+                           <View style={{ flex: 1 }}>
+                              <Text style={styles.docLabel}>Signature.pdf</Text>
+                              <Text style={styles.docStatus}>Tap to view</Text>
+                           </View>
+                           <Ionicons name="open-outline" size={18} color="#aaa" />
+                        </TouchableOpacity>
                      ) : (
+                        <View style={styles.signatureBox}>
+                           <Image source={{ uri: signatureUrl }} style={styles.signatureImg} resizeMode="contain" />
+                        </View>
+                     )
+                  ) : (
+                     <View style={styles.signatureBox}>
                         <View style={styles.signaturePlaceholder}>
                            <MaterialCommunityIcons name="draw-pen" size={22} color="#bbb" />
                            <Text style={styles.signaturePlaceholderTxt}>No signature added</Text>
                         </View>
-                     )}
-                  </View>
+                     </View>
+                  )}
+
                   <TouchableOpacity
                      style={styles.changePhotoBtn}
                      onPress={handleChangeSignature}
@@ -428,10 +475,27 @@ export default function DoctorProfileEditScreen() {
                   >
                      <Ionicons name="create-outline" size={14} color={TEAL} />
                      <Text style={styles.changePhotoTxt}>
-                        {uploadingSignature ? 'Uploading...' : signatureUrl ? 'Change Signature' : 'Add Signature'}
+                        {uploadingSignature ? 'Uploading...' : signatureUrl ? 'Upload New PDF' : 'Upload Signature (PDF)'}
                      </Text>
                   </TouchableOpacity>
+
+                  {!uploadingSignature && (
+                     <TouchableOpacity
+                        style={styles.drawSignatureLink}
+                        onPress={() => setSignaturePadVisible(true)}
+                        activeOpacity={0.7}
+                     >
+                        <Ionicons name="create-outline" size={15} color={TEAL} />
+                        <Text style={styles.drawSignatureLinkTxt}>or draw your signature instead</Text>
+                     </TouchableOpacity>
+                  )}
                </View>
+
+               <SignaturePadModal
+                  visible={signaturePadVisible}
+                  onClose={() => setSignaturePadVisible(false)}
+                  onSave={handleDrawnSignatureSave}
+               />
 
                {/* Doctor Category — drives specialization list + fixed fees */}
                <Text style={styles.groupLabel}>Doctor Category</Text>
@@ -727,6 +791,12 @@ const styles = StyleSheet.create({
    signatureImg: { width: '90%', height: '80%' },
    signaturePlaceholder: { alignItems: 'center', gap: 6 },
    signaturePlaceholderTxt: { fontSize: 12, color: '#bbb' },
+   docCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderColor: '#eee', borderRadius: 12, padding: 12, backgroundColor: '#fafafa' },
+   docIconBg: { width: 38, height: 38, borderRadius: 12, backgroundColor: '#E8F5F7', alignItems: 'center', justifyContent: 'center' },
+   docLabel: { fontSize: 13.5, fontWeight: '700', color: '#1a1a1a' },
+   docStatus: { fontSize: 11.5, color: '#888', marginTop: 2 },
+   drawSignatureLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 },
+   drawSignatureLinkTxt: { fontSize: 12.5, color: TEAL, fontWeight: '700' },
    // Category
    categoryCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1.5, borderColor: '#eee', borderRadius: 12, padding: 14, marginBottom: 10, backgroundColor: '#fafafa' },
    categoryCardActive: { borderColor: TEAL, backgroundColor: '#E8F5F7' },

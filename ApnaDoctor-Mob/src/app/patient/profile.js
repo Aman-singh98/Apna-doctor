@@ -76,7 +76,14 @@ export default function ProfileScreen() {
       {
          section: 'Preferences',
          items: [
-            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen' },
+            { label: 'App Settings', icon: 'settings-outline', route: '/settingsScreen?role=patient' },
+         ]
+      },
+      {
+         section: 'Legal',
+         items: [
+            { label: 'Privacy Policy', icon: 'shield-checkmark-outline', route: '/patient/privacy-policy' },
+            { label: 'Terms of Service', icon: 'document-text-outline', route: '/patient/terms-of-service' },
          ]
       }
    ];

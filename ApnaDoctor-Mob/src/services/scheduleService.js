@@ -4,7 +4,7 @@
 //
 // Example usage in handleSave():
 //   import { saveSchedule } from '../../src/services/scheduleService';
-//   await saveSchedule({ activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled, maxPatients });
+//   await saveSchedule({ activeDays, activeSlots, videoEnabled, audioEnabled, chatEnabled });
 
 import api from './api';
 

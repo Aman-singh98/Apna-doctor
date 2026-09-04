@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import {
    ActivityIndicator,
    Alert,
+   KeyboardAvoidingView,
    Modal,
+   Platform,
    ScrollView,
    StyleSheet,
    Text,
@@ -170,8 +172,12 @@ export default function FamilyMembersScreen() {
             animationType="slide"
             onRequestClose={() => setModalVisible(false)}
          >
-            <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+               style={styles.modalOverlay}
+               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
                <View style={styles.modalContent}>
+                  <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
                   <Text style={styles.modalTitle}>Add Family Member</Text>
                   <Text style={styles.modalSubtitle}>Create a patient sub-profile for booking</Text>
 
@@ -238,8 +244,9 @@ export default function FamilyMembersScreen() {
                         )}
                      </TouchableOpacity>
                   </View>
+                  </ScrollView>
                </View>
-            </View>
+            </KeyboardAvoidingView>
          </Modal>
 
       </SafeAreaView>
@@ -273,7 +280,7 @@ const styles = StyleSheet.create({
 
    // Modal styling
    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+   modalContent: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '90%' },
    modalTitle: { fontSize: 18, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
    modalSubtitle: { fontSize: 13, color: '#666', marginBottom: 16 },
    label: { fontSize: 13, fontWeight: '700', color: '#1a1a1a', marginTop: 12, marginBottom: 6 },

@@ -6,6 +6,7 @@ import {
    ActivityIndicator,
    Alert,
    KeyboardAvoidingView,
+   Linking,
    Modal,
    Platform,
    ScrollView,
@@ -26,6 +27,9 @@ import {
 
 const TEAL = '#1A7E8A';
 const RED = '#E24B4A';
+
+const SUPPORT_PHONE = '8278288099';
+const SUPPORT_EMAIL = 'apdcare77@gmail.com';
 
 const CATEGORIES = ['Billing', 'Doctor Consult', 'Records', 'Technical'];
 
@@ -232,21 +236,33 @@ export default function DoctorSupportScreen() {
                         <MaterialCommunityIcons name="headset" size={40} color="#fff" />
                         <Text style={styles.heroTitle}>We're here to help</Text>
                         <Text style={styles.heroSub}>Browse FAQs or raise a support ticket below</Text>
+                        <View style={styles.availableBadge}>
+                           <View style={styles.availableDot} />
+                           <Text style={styles.availableBadgeText}>Available 24×7</Text>
+                        </View>
                      </View>
 
                      {/* Quick Contact */}
                      <View style={styles.quickRow}>
-                        <TouchableOpacity style={styles.quickBtn} onPress={() => Alert.alert('Email Support', 'Composing email to doctors@apnadoctor.in')}>
+                        <TouchableOpacity
+                           style={styles.quickBtn}
+                           onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
+                        >
                            <View style={styles.quickIconBg}>
                               <Ionicons name="mail-outline" size={22} color={TEAL} />
                            </View>
                            <Text style={styles.quickBtnLabel}>Email Us</Text>
+                           <Text style={styles.quickBtnSub}>{SUPPORT_EMAIL}</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.quickBtn} onPress={() => Alert.alert('Phone Support', 'Calling support: 1800-890-2345 (Mon–Fri, 9AM–6PM)')}>
+                        <TouchableOpacity
+                           style={styles.quickBtn}
+                           onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE}`)}
+                        >
                            <View style={styles.quickIconBg}>
                               <Ionicons name="call-outline" size={22} color={TEAL} />
                            </View>
                            <Text style={styles.quickBtnLabel}>Call Us</Text>
+                           <Text style={styles.quickBtnSub}>{SUPPORT_PHONE}</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.quickBtn} onPress={() => Alert.alert('Live Chat', 'Connecting to live agent...')}>
                            <View style={styles.quickIconBg}>
@@ -279,7 +295,7 @@ export default function DoctorSupportScreen() {
                         </TouchableOpacity>
                      ))}
 
-                     <Text style={styles.footerNote}>Support hours: Mon–Fri, 9:00 AM – 6:00 PM IST</Text>
+                     <Text style={styles.footerNote}>Support available 24×7 · {SUPPORT_PHONE} · {SUPPORT_EMAIL}</Text>
                   </>
                ) : (
                   <>
@@ -521,12 +537,16 @@ const styles = StyleSheet.create({
    tabBtnTxt: { fontSize: 13, fontWeight: '600', color: '#666' },
    tabBtnTxtActive: { color: TEAL },
    heroCard: { backgroundColor: TEAL, borderRadius: 20, padding: 24, alignItems: 'center', marginBottom: 20, elevation: 3, shadowColor: TEAL, shadowOpacity: 0.2, shadowRadius: 6, shadowOffset: { width: 0, height: 3 } },
+   availableBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.18)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, marginTop: 12, gap: 6 },
+   availableDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#4CD964' },
+   availableBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600', letterSpacing: 0.3 },
    heroTitle: { fontSize: 20, fontWeight: '700', color: '#fff', marginTop: 10 },
    heroSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 6, textAlign: 'center' },
    quickRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
    quickBtn: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#f0f0f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
    quickIconBg: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#E8F5F7', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
    quickBtnLabel: { fontSize: 12, fontWeight: '600', color: '#333' },
+   quickBtnSub: { fontSize: 10, color: '#888', marginTop: 2, textAlign: 'center' },
    sectionTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a', marginBottom: 12, marginTop: 4 },
    faqCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#f0f0f0', elevation: 2, shadowColor: '#000', shadowOpacity: 0.02, shadowRadius: 4, shadowOffset: { width: 0, height: 2 } },
    faqHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },

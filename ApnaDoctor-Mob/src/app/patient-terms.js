@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { acceptTerms } from '../services/patientAuthService';
+import { LEGAL_ENTITY, LEGAL_VERSION, PATIENT_TERMS_SECTIONS } from '../constants/legalContent';
 
 const TEAL = '#1A7E8A';
 
@@ -45,42 +46,41 @@ export default function PatientTermsScreen() {
          </View>
 
          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <Text style={styles.intro}>
-               Before you can start using ApnaDoctor to book consultations, please read and
-               accept the following terms. You will only need to do this once.
-            </Text>
+            <View style={styles.docHeader}>
+               <Text style={styles.docTitle}>{LEGAL_ENTITY}</Text>
+               <Text style={styles.docSubtitle}>PATIENT TERMS & CONDITIONS</Text>
+               <Text style={styles.docMeta}>{LEGAL_VERSION}</Text>
+            </View>
 
-            {[
-               {
-                  title: '1. Nature of the Service',
-                  body: 'ApnaDoctor connects you with independent, verified doctors for online consultations. It does not replace emergency medical care — in a medical emergency, contact your local emergency services immediately.',
-               },
-               {
-                  title: '2. Accuracy of Information',
-                  body: 'You agree to provide accurate personal and medical information (age, allergies, medical history, current medication, etc.) so the doctor can give you appropriate advice. Inaccurate information may affect the quality of care you receive.',
-               },
-               {
-                  title: '3. Doctor-Patient Relationship',
-                  body: 'Consultations, prescriptions, and advice given through the app are provided by the doctor you consult, at their professional discretion. ApnaDoctor does not itself practice medicine or guarantee outcomes.',
-               },
-               {
-                  title: '4. Data & Privacy',
-                  body: 'Your health information is shared only with the doctors you consult, for the purpose of providing you care. We do not sell your personal or medical data to third parties.',
-               },
-               {
-                  title: '5. Fees & Refunds',
-                  body: 'Consultation fees are shown before booking and charged at the time of confirmation. Refund and cancellation terms for missed or cancelled appointments are described in the Payments section of the app.',
-               },
-               {
-                  title: '6. Account Responsibility',
-                  body: 'You are responsible for keeping your account and OTP-linked phone number secure. ApnaDoctor may suspend accounts used in violation of these terms or for abusive behavior toward doctors or staff.',
-               },
-            ].map((section) => (
+            {PATIENT_TERMS_SECTIONS.map((section) => (
                <View key={section.title} style={styles.section}>
                   <Text style={styles.sectionTitle}>{section.title}</Text>
                   <Text style={styles.sectionBody}>{section.body}</Text>
                </View>
             ))}
+
+            <View style={styles.declarationBox}>
+               <Text style={styles.declarationTitle}>Mandatory Patient Declaration & Consent</Text>
+               <Text style={styles.declarationBody}>
+                  I confirm that I have read, understood and agree to these Patient Terms &
+                  Conditions and all applicable Platform Policies, including the Privacy Policy,
+                  Telemedicine Consent Policy and Refund & Cancellation Policy; I voluntarily
+                  consent to receive telemedicine services where clinically appropriate; I
+                  understand the benefits and limitations of telemedicine and that emergency
+                  medical conditions require immediate in-person care; I consent to the
+                  collection, processing and storage of my personal and health information in
+                  accordance with applicable law and the Privacy Policy; I acknowledge that
+                  diagnosis, treatment and prescriptions are the sole professional responsibility
+                  of the consulting Registered Medical Practitioner (RMP); I understand that no
+                  GST is currently charged on consultation fees and that fees are non-refundable
+                  once a consultation has been completed, except as provided under the Refund &
+                  Cancellation Policy; I acknowledge and accept that Apna Doctor Healthcare LLP
+                  shall have the final decision-making authority on all platform-related,
+                  operational and administrative matters, and I agree to accept and abide by such
+                  decisions; and I agree to be legally bound by these Terms by selecting 'I AGREE
+                  & CONTINUE'.
+               </Text>
+            </View>
          </ScrollView>
 
          {/* Checkbox + CTA */}
@@ -94,7 +94,8 @@ export default function PatientTermsScreen() {
                   {checked && <Ionicons name="checkmark" size={14} color="#fff" />}
                </View>
                <Text style={styles.checkLabel}>
-                  I have read and agree to the Terms & Conditions above
+                  I confirm I have read, understood and agree to the Patient Terms & Conditions
+                  and the Mandatory Declaration & Consent above
                </Text>
             </TouchableOpacity>
 
@@ -105,7 +106,7 @@ export default function PatientTermsScreen() {
                activeOpacity={0.85}
             >
                <Text style={styles.continueBtnTxt}>
-                  {saving ? 'Please wait...' : 'Accept & Continue'}
+                  {saving ? 'Please wait...' : 'I AGREE & CONTINUE'}
                </Text>
                <Ionicons name="arrow-forward" size={18} color="#fff" style={{ marginLeft: 6 }} />
             </TouchableOpacity>
@@ -120,10 +121,16 @@ const styles = StyleSheet.create({
    logoImg: { width: 34, height: 34, borderRadius: 10 },
    barTitle: { fontSize: 16, fontWeight: '700', color: '#1a1a1a' },
    scroll: { padding: 16, paddingBottom: 24 },
-   intro: { fontSize: 13, color: '#555', lineHeight: 20, marginBottom: 16 },
+   docHeader: { alignItems: 'center', marginBottom: 16 },
+   docTitle: { fontSize: 12, fontWeight: '700', color: '#888', letterSpacing: 0.5 },
+   docSubtitle: { fontSize: 17, fontWeight: '800', color: '#1a1a1a', marginTop: 4, textAlign: 'center' },
+   docMeta: { fontSize: 11.5, color: '#999', marginTop: 4 },
    section: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#f0f0f0' },
    sectionTitle: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 6 },
    sectionBody: { fontSize: 13, color: '#666', lineHeight: 19 },
+   declarationBox: { backgroundColor: '#eef7f8', borderRadius: 14, padding: 14, marginTop: 6, borderWidth: 1, borderColor: '#cfe9ec' },
+   declarationTitle: { fontSize: 13.5, fontWeight: '700', color: TEAL, marginBottom: 6 },
+   declarationBody: { fontSize: 12.5, color: '#3a4b4d', lineHeight: 19 },
    footer: { padding: 16, paddingTop: 12, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
    checkRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
    checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#ccc', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
